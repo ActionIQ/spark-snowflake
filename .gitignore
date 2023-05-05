@@ -4,6 +4,7 @@ project/target
 .idea_modules/
 *.DS_Store
 build/*.jar
+.bsp
 *.private
 metastore_db/*
 *.log

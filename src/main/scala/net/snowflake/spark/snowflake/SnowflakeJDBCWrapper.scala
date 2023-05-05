@@ -183,7 +183,7 @@ private[snowflake] class JDBCWrapper {
     jdbcProperties.put("client_session_keep_alive", "true")
 
     // Force DECIMAL for NUMBER (SNOW-33227)
-    jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")
+    jdbcProperties.put("jdbc_treat_decimal_as_int", "false")
 
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
@@ -784,10 +784,22 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       .toString()
 
-    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-                       | execute query without bind variable:
-                       |""".stripMargin.filter(_ >= ' ')
-    log.info(s"$logPrefix $query")
+    if (log.isDebugEnabled) {
+      val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                      |execute query without bind variable =>
+                      |$query
+                      |
+                      |callstack =>
+                      |${Thread.currentThread.getStackTrace.mkString("\n")}
+                      |""".stripMargin
+      log.debug(logMsg)
+    } else {
+      val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                      |execute query without bind variable =>
+                      |$query
+                      |""".stripMargin
+      log.info(logMsg)
+    }
 
     conn.prepareStatement(query)
   }
