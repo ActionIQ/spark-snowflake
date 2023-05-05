@@ -16,8 +16,9 @@
 
 import scala.util.Properties
 
-val sparkVersion = "2.4.0"
+val sparkVersion = "2.4.7"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
+val defaultScalaVersion = "2.12.15"
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -26,7 +27,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.9.3"
+val sparkConnectorVersion = "2.9.3-aiq6"
 
 lazy val ItTest = config("it") extend Test
 
@@ -42,8 +43,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     name := "spark-snowflake",
     organization := "net.snowflake",
     version := s"${sparkConnectorVersion}-spark_2.4",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
-    crossScalaVersions := Seq("2.11.12", "2.12.11"),
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = defaultScalaVersion),
+    crossScalaVersions := Seq("2.11.12", defaultScalaVersion),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),

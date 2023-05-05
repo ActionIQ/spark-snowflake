@@ -225,7 +225,7 @@ object TestUtils {
     jdbcProperties.put("client_session_keep_alive", "true")
 
     // Force DECIMAL for NUMBER (SNOW-33227)
-    jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")
+    jdbcProperties.put("jdbc_treat_decimal_as_int", "false")
 
     // Add extra properties from sfOptions
     val extraOptions = params.sfExtraOptions
