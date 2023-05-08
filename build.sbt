@@ -16,8 +16,9 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.3"
-val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.3.0")
+val sparkVersion = "3.3.2"
+val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
+val defaultScalaVersion = "2.12.15"
 
 /*
  * Don't change the variable name "sparkConnectorVersion" because
@@ -26,7 +27,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse("3.3.0")
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.11.3"
+val sparkConnectorVersion = "2.11.3-aiq0"
 
 lazy val ItTest = config("it") extend Test
 
@@ -38,13 +39,14 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(inConfig(ItTest)(Defaults.testSettings))
   .settings(Defaults.coreDefaultSettings)
   .settings(Defaults.itSettings)
+  .enablePlugins(PublishToArtifactory)
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
     version := s"${sparkConnectorVersion}-spark_3.3",
-    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = "2.12.11"),
+    scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = defaultScalaVersion),
     // Spark 3.2/3.3 supports scala 2.12 and 2.13
-    crossScalaVersions := Seq("2.12.11", "2.13.9"),
+    crossScalaVersions := Seq("2.12.11", defaultScalaVersion),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
@@ -126,13 +128,4 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
             <url>https://github.com/Mingli-Rui</url>
           </developer>
         </developers>,
-
-    publishTo := Some(
-      if (isSnapshot.value) {
-        Opts.resolver.sonatypeSnapshots
-      } else {
-        Opts.resolver.sonatypeStaging
-      }
-    )
-
   )
