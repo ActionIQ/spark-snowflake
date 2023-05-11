@@ -31,19 +31,19 @@ object SnowflakeConnectorUtils {
   @transient lazy val log: Logger = LoggerFactory.getLogger(getClass.getName)
 
   /**
-    * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSION enable PushDown,
+    * Check Spark version, if Spark version matches SUPPORT_SPARK_VERSIONS enable PushDown,
     * otherwise disable it.
     */
-  val SUPPORT_SPARK_VERSION = "3.3"
+  val SUPPORT_SPARK_VERSIONS = Seq("3.3", "3-3")
 
   def checkVersionAndEnablePushdown(session: SparkSession): Boolean =
-    if (session.version.startsWith(SUPPORT_SPARK_VERSION)) {
+    if (SUPPORT_SPARK_VERSIONS.exists(session.version.startsWith)) {
       enablePushdownSession(session)
       true
     } else {
       log.warn("Query pushdown is not supported because you are using " +
         s"Spark ${session.version} with a connector designed to support Spark " +
-        s"$SUPPORT_SPARK_VERSION. Either use the version of Spark supported by " +
+        s"$SUPPORT_SPARK_VERSIONS. Either use the version of Spark supported by " +
         s"the connector or install a version of the connector that supports " +
         s"your version of Spark.")
       disablePushdownSession(session)

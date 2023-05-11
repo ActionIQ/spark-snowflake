@@ -27,7 +27,7 @@ val defaultScalaVersion = "2.12.15"
  * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
  * in snowflake repository.
  */
-val sparkConnectorVersion = "2.11.3-aiq0"
+val sparkConnectorVersion = "2.11.3-aiq1"
 
 lazy val ItTest = config("it") extend Test
 
@@ -66,6 +66,7 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.scalatest" %% "scalatest" % "3.1.1" % Test,
       "org.mockito" % "mockito-core" % "1.10.19" % Test,
       "org.apache.commons" % "commons-lang3" % "3.5" % "provided",
+      "com.google.guava" % "guava" % "20.0" % "provided",
       // For test to read/write from postgresql
       "org.postgresql" % "postgresql" % "42.5.4" % Test,
       // Below is for Spark Streaming from Kafka test only

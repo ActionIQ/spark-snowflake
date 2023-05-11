@@ -660,10 +660,22 @@ private[snowflake] class SnowflakeSQLStatement(
       }
       .toString()
 
-    val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-                       | execute query without bind variable:
-                       |""".stripMargin.filter(_ >= ' ')
-    log.info(s"$logPrefix $query")
+    if (log.isDebugEnabled) {
+      val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                      |execute query without bind variable =>
+                      |$query
+                      |
+                      |callstack =>
+                      |${Thread.currentThread.getStackTrace.mkString("\n")}
+                      |""".stripMargin
+      log.debug(logMsg)
+    } else {
+      val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
+                      |execute query without bind variable =>
+                      |$query
+                      |""".stripMargin
+      log.info(logMsg)
+    }
 
     conn.prepareStatement(query)
   }

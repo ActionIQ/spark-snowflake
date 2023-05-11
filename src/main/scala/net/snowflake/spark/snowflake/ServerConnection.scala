@@ -208,9 +208,9 @@ private[snowflake] object ServerConnection {
 
     // Force DECIMAL for NUMBER (SNOW-33227)
     if (params.treatDecimalAsLong) {
-      jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "true")
+      jdbcProperties.put("jdbc_treat_decimal_as_int", "true")
     } else {
-      jdbcProperties.put("JDBC_TREAT_DECIMAL_AS_INT", "false")
+      jdbcProperties.put("jdbc_treat_decimal_as_int", "false")
     }
 
     // Add extra properties from sfOptions
