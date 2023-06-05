@@ -300,11 +300,11 @@ private[snowflake] object QueryBuilder {
 
   def getRDDFromPlan(
     plan: LogicalPlan
-  ): Option[(Seq[Attribute], RDD[InternalRow])] = {
+  ): Option[(Seq[Attribute], RDD[InternalRow], String)] = {
     val qb = new QueryBuilder(plan)
 
     qb.tryBuild.map { executedBuilder =>
-      (executedBuilder.getOutput, executedBuilder.rdd)
+      (executedBuilder.getOutput, executedBuilder.rdd, executedBuilder.statement.toString)
     }
   }
 }

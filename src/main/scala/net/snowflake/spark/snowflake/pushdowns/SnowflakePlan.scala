@@ -7,7 +7,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /** SnowflakePlan, with RDD defined by custom query. */
-case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow])
+case class SnowflakePlan(output: Seq[Attribute], rdd: RDD[InternalRow], sql: String)
     extends SparkPlan {
 
   override def children: Seq[SparkPlan] = Nil
