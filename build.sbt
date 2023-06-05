@@ -47,7 +47,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = defaultScalaVersion),
     // Spark 3.2/3.3 supports scala 2.12 and 2.13
     crossScalaVersions := Seq(defaultScalaVersion),
-    javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
+    javacOptions ++= Seq("-source", "17", "-target", "17"),
+    scalacOptions ++= Seq("-release", "17"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     // Set up GPG key for release build from environment variable: GPG_HEX_CODE
@@ -90,7 +91,10 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
 
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
-    Test / javaOptions ++= Seq("-Xms1024M", "-Xmx4096M"),
+    Test / javaOptions ++= Seq(
+      "-Xms1024M", "-Xmx4096M",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    ),
 
     // Release settings
     // usePgpKeyHex(Properties.envOrElse("GPG_SIGNATURE", "12345")),
