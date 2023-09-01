@@ -16,18 +16,22 @@
 
 import scala.util.Properties
 
-val sparkVersion = "2.4.7"
+val sparkVersion = "2-4-7-aiq63"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
-/*
- * Don't change the variable name "sparkConnectorVersion" because
- * jenkins job "BumpUpSparkConnectorVersion" depends on it.
- * If it has to be changed, please also change the script:
- * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
- * in snowflake repository.
- */
-val sparkConnectorVersion = "2.9.3-aiq6"
+// publish version of this connector
+val sparkConnectorVersion = "2.9.3-aiq7"
+
+// keep in sync with spark version
+val fasterXmlVer = "2.9.10"
+val fasterXmlDeps = Seq(
+  "com.fasterxml.jackson.core" % "jackson-annotations" % fasterXmlVer,
+  "com.fasterxml.jackson.core" % "jackson-databind" % fasterXmlVer,
+  "com.fasterxml.jackson.core" % "jackson-core" % fasterXmlVer,
+  "com.fasterxml.jackson.module" % "jackson-module-paranamer" % fasterXmlVer,
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % fasterXmlVer,
+)
 
 lazy val ItTest = config("it") extend Test
 
@@ -39,17 +43,22 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
   .settings(inConfig(ItTest)(Defaults.testSettings))
   .settings(Defaults.coreDefaultSettings)
   .settings(Defaults.itSettings)
+  .enablePlugins(PublishToArtifactory)
   .settings(
     name := "spark-snowflake",
     organization := "net.snowflake",
     version := s"${sparkConnectorVersion}-spark_2.4",
     scalaVersion := sys.props.getOrElse("SPARK_SCALA_VERSION", default = defaultScalaVersion),
-    crossScalaVersions := Seq("2.11.12", defaultScalaVersion),
+    crossScalaVersions := Seq(defaultScalaVersion),
     javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+    resolvers += "aiq-artifacts".at("s3://s3-us-east-1.amazonaws.com/aiq-artifacts/releases"),
+    resolvers += "Artifactory".at("https://actioniq.jfrog.io/artifactory/aiq-sbt-local/"),
+    resolvers += DefaultMavenRepository,
+    resolvers += Resolver.mavenLocal,
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.3",
       "net.snowflake" % "snowflake-jdbc" % "3.13.14",
@@ -70,7 +79,8 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
       "org.apache.spark" %% "spark-sql" % testSparkVersion % "provided, test" classifier "test-sources",
       "org.apache.spark" %% "spark-catalyst" % testSparkVersion % "provided, test" classifier "test-sources"
       // "org.apache.spark" %% "spark-hive" % testSparkVersion % "provided, test"
-    ),
+    ) ++ fasterXmlDeps,
+    dependencyOverrides ++= fasterXmlDeps,
 
     Test / testOptions += Tests.Argument("-oF"),
     Test / fork := true,
@@ -113,12 +123,4 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
             <url>https://github.com/Mingli-Rui</url>
           </developer>
         </developers>,
-
-    publishTo := Some(
-      if (isSnapshot.value)
-        Opts.resolver.sonatypeSnapshots
-      else
-        Opts.resolver.sonatypeStaging
-    )
-
   )

@@ -149,6 +149,13 @@ package object querygeneration {
     }
   }
 
+  private[querygeneration] def functionStatement(
+    name: String,
+    args: Seq[SnowflakeSQLStatement],
+  ): SnowflakeSQLStatement = {
+    ConstantString(name) + blockStatement(mkStatement(args, ","))
+  }
+
   final def mkStatement(
     seq: Seq[SnowflakeSQLStatement],
     delimiter: SnowflakeSQLStatement

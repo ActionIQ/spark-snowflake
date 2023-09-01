@@ -194,8 +194,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           }
         }
 
-      // On Spark 2.4, Union() has 1 parameter only.
-      case Union(children) =>
+      case Union(children, _, executeAsFullOuter) if !executeAsFullOuter =>
         Some(UnionQuery(children, alias.next))
 
       case Expand(projections, output, child) =>
