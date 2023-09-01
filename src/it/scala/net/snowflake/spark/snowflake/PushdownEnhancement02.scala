@@ -222,6 +222,43 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     }
   }
 
+  test("AIQ test pushdown day_start") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(ts bigint, tz string, pd int)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"(1460080000000, 'America/New_York', 2)")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_day_start(ts, tz, pd)")
+    val expectedResult = Seq(Row(1460174400000L))
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  DATE_PART (
+         |    epoch_millisecond ,
+         |    DATE_TRUNC (
+         |      'day' ,
+         |      DATEADD (
+         |        'day' ,
+         |        CAST ( "SUBQUERY_0"."PD" AS NUMBER ) ,
+         |        CONVERT_TIMEZONE (
+         |          "SUBQUERY_0"."TZ" ,
+         |          CAST ( "SUBQUERY_0"."TS" AS NUMBER ) ::varchar ) ) ) )
+         |  ) AS "SUBQUERY_1_COL_0" FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
+  }
+
   test("test pushdown functions date_add/date_sub") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
