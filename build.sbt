@@ -16,18 +16,12 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3.3.2"
+val sparkVersion = "3-3-2-aiq25"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
-/*
- * Don't change the variable name "sparkConnectorVersion" because
- * jenkins job "BumpUpSparkConnectorVersion" depends on it.
- * If it has to be changed, please also change the script:
- * Tests/jenkins/BumpUpSparkConnectorVersion/run.sh
- * in snowflake repository.
- */
-val sparkConnectorVersion = "2.11.3-aiq2"
+// publish version of this connector
+val sparkConnectorVersion = "2.11.3-aiq3"
 
 lazy val ItTest = config("it") extend Test
 
@@ -51,8 +45,13 @@ lazy val root = project.withId("spark-snowflake").in(file("."))
     scalacOptions ++= Seq("-release", "17"),
     licenses += "Apache-2.0" -> url("http://opensource.org/licenses/Apache-2.0"),
     credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
-    resolvers +=
+    resolvers ++= Seq(
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+      "aiq-artifacts".at("s3://s3-us-east-1.amazonaws.com/aiq-artifacts/releases"),
+      "Artifactory".at("https://actioniq.jfrog.io/artifactory/aiq-sbt-local/"),
+      DefaultMavenRepository,
+      Resolver.mavenLocal,
+    ),
     libraryDependencies ++= Seq(
       "net.snowflake" % "snowflake-ingest-sdk" % "0.10.8",
       "net.snowflake" % "snowflake-jdbc" % "3.13.30",
