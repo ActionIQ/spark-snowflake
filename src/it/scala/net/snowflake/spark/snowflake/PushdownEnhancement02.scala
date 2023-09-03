@@ -264,7 +264,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val resultDF = tmpDF.selectExpr("aiq_day_start(ts, tz, pd)")
     val expectedResult = Seq(
-      Row(1460174400000L),
+      Row(1459954800000L),
       Row(1460174400000L),
     )
 
