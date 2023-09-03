@@ -233,8 +233,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
           }
         }
 
-      // From Spark 3.1, Union has 3 parameters
-      case Union(children, byName, allowMissingCol) =>
+      case Union(children, byName, allowMissingCol, _, executeAsFullOuter) if !executeAsFullOuter =>
         // Snowflake doesn't support Union by Name. For details about what's UNION by Name,
         // refer to the comment and example at Spark function: DataSet.unionByName()
         if (byName || allowMissingCol) {
