@@ -16,12 +16,12 @@
 
 import scala.util.Properties
 
-val sparkVersion = "2-4-7-aiq63"
+val sparkVersion = "2-4-7-aiq64"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
-// publish version of this connector
-val sparkConnectorVersion = "2.9.3-aiq7"
+// increment this version when making a new release
+val sparkConnectorVersion = "2.9.3-aiq8"
 
 // keep in sync with spark version
 val fasterXmlVer = "2.9.10"
