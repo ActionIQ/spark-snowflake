@@ -9,6 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Length,
   Like,
   Lower,
+  StringInstr,
   StringLPad,
   StringRPad,
   StringTranslate,
@@ -47,6 +48,11 @@ private[querygeneration] object StringStatement {
           _: StringTrimRight | _: Substring | _: Upper | _: Length =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
+
+      // Spark INSTR and Snowflake CHARINDEX are both 1-based, but their args are swapped
+      case StringInstr(left, right) =>
+        ConstantString("CHARINDEX") +
+          blockStatement(convertStatements(fields, Seq(right, left): _*))
 
       case Concat(children) =>
         val rightSide =

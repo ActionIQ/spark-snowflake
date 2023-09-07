@@ -290,6 +290,53 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown instr") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('hello world')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "instr(s, 'l')",
+      "instr(s, 'hell')",
+      "instr(s, ' w')",
+      "instr(s, ' ')",
+      "instr(s, ' d ')",
+      "instr(s, 'NOPE')",
+      "instr(s, NULL)",
+      "instr(NULL, 'foo')",
+    )
+    val expectedResult = Seq(Row(
+      3,
+      1,
+      6,
+      6,
+      0,
+      0,
+      null,
+      null,
+    ))
+    checkAnswer(resultDF, expectedResult)
+
+    val pushDf = tmpDF.selectExpr("instr(s, 'hell')")
+    testPushdown(
+      s"""
+         |SELECT ( CHARINDEX ( 'hell' , "SUBQUERY_0"."S" )
+         |  ) AS "SUBQUERY_1_COL_0" FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |""".stripMargin,
+      pushDf,
+      Seq(Row(1))
+    )
+  }
+
   test("test pushdown functions date_add/date_sub") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
