@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDayStart, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDayStart, AiqDateToString, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -93,6 +93,72 @@ private[querygeneration] object DateStatement {
               ),
             ),
           ),
+        )
+
+      /*
+      --- spark.sql(
+      ---   "select aiq_date_to_string(1567363852000, "yyyy-MM-dd HH:mm", 'America/New_York')"
+      --- ).as[String].collect.head == "2019-09-01 14:50"
+      select TO_CHAR(
+        TO_TIMESTAMP(
+          CONVERT_TIMEZONE(
+            'America/New_York',
+            1567363852000::varchar
+          )
+        ),
+        REGEXP_REPLACE(
+          REPLACE(
+            REPLACE(
+              'yyyy-mm-dd HH:mm', 'HH', 'HH24'
+            ),
+            'hh', 'HH12'
+          ),
+          'mm', 'mi', 1, 2
+        )
+      )
+      -- 2019-09-01 14:50
+      */
+      case AiqDateToString(timestampLong, formatStr, timezoneStr) =>
+        functionStatement(
+          "TO_CHAR",
+          Seq(
+            functionStatement(
+              "TO_TIMESTAMP",
+              Seq(
+                functionStatement(
+                  "CONVERT_TIMEZONE",
+                  Seq(
+                    convertStatement(timezoneStr, fields),
+                    convertStatement(timestampLong, fields) + ConstantString("::varchar"),
+                  ),
+                )
+              )
+            ),
+            functionStatement(
+              "REGEXP_REPLACE",
+              Seq(
+                functionStatement(
+                  "REPLACE",
+                  Seq(
+                    functionStatement(
+                      "REPLACE",
+                      Seq(
+                        convertStatement(formatStr, fields),
+                        ConstantString("'HH'").toStatement,
+                        ConstantString("'HH24'").toStatement,
+                      )
+                    ),
+                    ConstantString("'hh'").toStatement,
+                    ConstantString("'HH12'").toStatement,
+                  ),
+                ),
+                ConstantString("'mm'").toStatement,
+                ConstantString("'mi'").toStatement,
+                ConstantString("'1'").toStatement,
+                ConstantString("'2'").toStatement,
+              )
+            ),
+          )
         )
 
       case _ => null

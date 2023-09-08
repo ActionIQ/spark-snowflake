@@ -306,6 +306,29 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown date_to_string") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(ts bigint, fmt string, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"(1567363852000, 'yyyy-MM-dd HH:mm', 'America/New_York')")
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_date_to_string(ts, fmt, tz)")
+    val expectedResult = Seq(Row(1567363852000L))
+
+    testPushdown(
+      s"""
+         |""".stripMargin,
+      resultDF,
+      expectedResult
+    )
+  }
+
   test("test pushdown functions date_add/date_sub") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
