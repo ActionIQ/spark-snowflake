@@ -310,7 +310,16 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(ts bigint, fmt string, tz string)")
     jdbcUpdate(s"insert into $test_table_date values " +
-      s"(1567363852000, 'yyyy-MM-dd HH:mm', 'America/New_York')")
+      s"""
+         |(1567363852000, 'yyyy-mm-dd', 'America/New_York'),
+         |(1567363852000, 'YYYY-MM-DD', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd HH:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd hh:mm a', 'America/New_York'),
+         |(1567363852000, 'yyyy-mm-dd a hh:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd HH:mm:ss', 'America/New_York'),
+         |(1567363852000, 'yyyy-mm-dd hh:mm:ss', 'America/New_York')
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -319,11 +328,34 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .load()
 
     val resultDF = tmpDF.selectExpr("aiq_date_to_string(ts, fmt, tz)")
-    val expectedResult = Seq(Row(1567363852000L))
+    val expectedResult = Seq(
+      Row("2019-09-01"),
+      Row("2019-09-01"),
+      Row("2019-09-01 14:50"),
+      Row("2019-09-01 02:50 PM"),
+      Row("2019-09-01 PM 02:50"),
+      Row("2019-09-01 14:50:52"),
+      Row("2019-09-01 02:50:52"),
+    )
 
     testPushdown(
       s"""
-         |""".stripMargin,
+         |SELECT (
+         |  TO_CHAR (
+         |    TO_TIMESTAMP (
+         |      CONVERT_TIMEZONE ("SUBQUERY_0"."TZ", CAST ("SUBQUERY_0"."TS" AS NUMBER) ::varchar)
+         |    ),
+         |    REGEXP_REPLACE (
+         |      REPLACE (
+         |        REPLACE (
+         |          REPLACE ("SUBQUERY_0"."FMT", 'HH', 'HH24') , 'hh', 'HH12'
+         |        ) , 'a', 'AM'
+         |      ) , 'mm', 'mi', '1', '2'
+         |    )
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (SELECT * FROM ($test_table_date) AS "SF_CONNECTOR_QUERY_ALIAS") AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.mkString("").trim,
       resultDF,
       expectedResult
     )

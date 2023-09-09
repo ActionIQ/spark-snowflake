@@ -10,6 +10,49 @@ private[querygeneration] object DateStatement {
   // And the syntax is some different.
   val SNOWFLAKE_DATEADD = "DATEADD"
 
+  /** Function to convert a regular date format to a Snowflake date format */
+  private def dateFormatFunctionStatement(
+    format: Expression,
+    fieldsSeq: Seq[Attribute]
+  ): SnowflakeSQLStatement = {
+    functionStatement(
+      "REGEXP_REPLACE",
+      Seq(
+        functionStatement(
+          "REPLACE",
+          Seq(
+            functionStatement(
+              "REPLACE",
+              Seq(
+                functionStatement(
+                  "REPLACE",
+                  Seq(
+                    convertStatement(format, fieldsSeq),
+                    ConstantString("'HH'").toStatement,
+                    // Snowflake Two digits for hour (00 through 23)
+                    ConstantString("'HH24'").toStatement,
+                  )
+                ),
+                ConstantString("'hh'").toStatement,
+                // Snowflake Two digits for hour (01 through 12)
+                ConstantString("'HH12'").toStatement,
+              ),
+            ),
+            ConstantString("'a'").toStatement,
+            // Snowflake Ante meridiem (am) / post meridiem (pm)
+            ConstantString("'AM'").toStatement,
+          )
+        ),
+        ConstantString("'mm'").toStatement,
+        // Snowflake Two digits for minute (00 through 59)
+        ConstantString("'mi'").toStatement,
+        ConstantString("'1'").toStatement,
+        // Replace second occurrence of pattern since `mm` works for month
+        ConstantString("'2'").toStatement,
+      )
+    )
+  }
+
   def unapply(
     expAttr: (Expression, Seq[Attribute])
   ): Option[SnowflakeSQLStatement] = {
@@ -66,7 +109,7 @@ private[querygeneration] object DateStatement {
         )
       )
       -- 1460174400000
-       */
+      */
       case AiqDayStart(timestampLong, timezoneStr, plusDaysInt) =>
         functionStatement(
           "DATE_PART",
@@ -97,7 +140,7 @@ private[querygeneration] object DateStatement {
 
       /*
       --- spark.sql(
-      ---   "select aiq_date_to_string(1567363852000, "yyyy-MM-dd HH:mm", 'America/New_York')"
+      ---   """select aiq_date_to_string(1567363852000, "yyyy-MM-dd HH:mm", 'America/New_York')"""
       --- ).as[String].collect.head == "2019-09-01 14:50"
       select TO_CHAR(
         TO_TIMESTAMP(
@@ -134,30 +177,7 @@ private[querygeneration] object DateStatement {
                 )
               )
             ),
-            functionStatement(
-              "REGEXP_REPLACE",
-              Seq(
-                functionStatement(
-                  "REPLACE",
-                  Seq(
-                    functionStatement(
-                      "REPLACE",
-                      Seq(
-                        convertStatement(formatStr, fields),
-                        ConstantString("'HH'").toStatement,
-                        ConstantString("'HH24'").toStatement,
-                      )
-                    ),
-                    ConstantString("'hh'").toStatement,
-                    ConstantString("'HH12'").toStatement,
-                  ),
-                ),
-                ConstantString("'mm'").toStatement,
-                ConstantString("'mi'").toStatement,
-                ConstantString("'1'").toStatement,
-                ConstantString("'2'").toStatement,
-              )
-            ),
+            dateFormatFunctionStatement(formatStr, fields),
           )
         )
 
