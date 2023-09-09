@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDayStart, AiqDateToString, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -10,47 +10,19 @@ private[querygeneration] object DateStatement {
   // And the syntax is some different.
   val SNOWFLAKE_DATEADD = "DATEADD"
 
-  /** Function to convert a regular date format to a Snowflake date format */
-  private def dateFormatFunctionStatement(
-    format: Expression,
-    fieldsSeq: Seq[Attribute]
-  ): SnowflakeSQLStatement = {
-    functionStatement(
-      "REGEXP_REPLACE",
-      Seq(
-        functionStatement(
-          "REPLACE",
-          Seq(
-            functionStatement(
-              "REPLACE",
-              Seq(
-                functionStatement(
-                  "REPLACE",
-                  Seq(
-                    convertStatement(format, fieldsSeq),
-                    ConstantString("'HH'").toStatement,
-                    // Snowflake Two digits for hour (00 through 23)
-                    ConstantString("'HH24'").toStatement,
-                  )
-                ),
-                ConstantString("'hh'").toStatement,
-                // Snowflake Two digits for hour (01 through 12)
-                ConstantString("'HH12'").toStatement,
-              ),
-            ),
-            ConstantString("'a'").toStatement,
-            // Snowflake Ante meridiem (am) / post meridiem (pm)
-            ConstantString("'AM'").toStatement,
-          )
-        ),
-        ConstantString("'mm'").toStatement,
-        // Snowflake Two digits for minute (00 through 59)
-        ConstantString("'mi'").toStatement,
-        ConstantString("'1'").toStatement,
-        // Replace second occurrence of pattern since `mm` works for month
-        ConstantString("'2'").toStatement,
-      )
-    )
+  /**
+    * Function to convert a regular date format to a Snowflake date format
+    *   - Note: This solution has the limitation that `mm` indicates only minutes.
+    *     This is true for regular date formats but in Snowflake `MM` (month)
+    *     and `mm` are the same. Since our system supports the former this is an
+    *     acceptable limitation (for now).
+    */
+  private def sparkDateFmtToSnowflakeDateFmt(format: String): String = {
+    format
+      .replaceAll("HH", "HH24") // Snowflake Two digits for hour (00 through 23)
+      .replaceAll("hh", "HH12") // Snowflake Two digits for hour (01 through 12)
+      .replaceAll("a", "AM")    // Snowflake Ante meridiem (am) / post meridiem (pm)
+      .replaceAll("mm", "mi")   // Snowflake Two digits for minute (00 through 59)
   }
 
   def unapply(
@@ -140,6 +112,44 @@ private[querygeneration] object DateStatement {
 
       /*
       --- spark.sql(
+      ---   "select aiq_string_to_date('2019-09-01 14:50:52', 'yyyy-MM-dd hh:mm:ss', 'America/New_York')"
+      --- ).as[Long].collect.head == 1567363852000L
+      select DATE_PART(
+        epoch_millisecond,
+        CONVERT_TIMEZONE(
+          'America/New_York',
+          TO_TIMESTAMP(
+            '2019-09-01 14:50:52',
+            'yyyy-MM-dd hh:mm:ss'
+          )
+        )
+      )
+      -- 1567363852000
+      */
+      case AiqStringToDate(dateStr, formatStr, timezoneStr) if formatStr.foldable =>
+        val format = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
+        functionStatement(
+          "DATE_PART",
+          Seq(
+            ConstantString("epoch_millisecond").toStatement,
+            functionStatement(
+              "CONVERT_TIMEZONE",
+              Seq(
+                convertStatement(timezoneStr, fields),
+                functionStatement(
+                  "TO_TIMESTAMP",
+                  Seq(
+                    convertStatement(dateStr, fields),
+                    ConstantString(format).toStatement,
+                  )
+                ),
+              ),
+            ),
+          )
+        )
+
+      /*
+      --- spark.sql(
       ---   """select aiq_date_to_string(1567363852000, "yyyy-MM-dd HH:mm", 'America/New_York')"""
       --- ).as[String].collect.head == "2019-09-01 14:50"
       select TO_CHAR(
@@ -149,19 +159,12 @@ private[querygeneration] object DateStatement {
             1567363852000::varchar
           )
         ),
-        REGEXP_REPLACE(
-          REPLACE(
-            REPLACE(
-              'yyyy-mm-dd HH:mm', 'HH', 'HH24'
-            ),
-            'hh', 'HH12'
-          ),
-          'mm', 'mi', 1, 2
-        )
+        'yyyy-mm-dd HH:mm'
       )
       -- 2019-09-01 14:50
       */
-      case AiqDateToString(timestampLong, formatStr, timezoneStr) =>
+      case AiqDateToString(timestampLong, formatStr, timezoneStr) if formatStr.foldable =>
+        val format = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
         functionStatement(
           "TO_CHAR",
           Seq(
@@ -177,7 +180,7 @@ private[querygeneration] object DateStatement {
                 )
               )
             ),
-            dateFormatFunctionStatement(formatStr, fields),
+            ConstantString(format).toStatement,
           )
         )
 

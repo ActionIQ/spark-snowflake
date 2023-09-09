@@ -306,18 +306,63 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown string_to_date") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(dt string, fmt string, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-09-01 14:50', 'yyyy-MM-dd HH:mm', 'America/New_York'),
+         |('2019-09-01 02:50 PM', 'yyyy-MM-dd hh:mm a', 'America/New_York'),
+         |('2019-09-01 PM 02:50', 'yyyy-MM-dd a hh:mm', 'America/New_York'),
+         |('2019-09-01 PM 02:50 PM', 'yyyy-MM-dd a hh:mm:mm:ss a', 'America/New_York')
+         |('2019-09-01 14:50:52', 'yyyy-MM-dd HH:mm:ss', 'America/New_York'),
+         |('2019-09-01 02:50:52', 'yyyy-MM-dd hh:mm:ss', 'America/New_York'),
+         |('2019-09-01 02:50:50:52', 'yyyy-MM-dd hh:mm:mm:ss', 'America/New_York')
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_string_to_date(dt, fmt, tz)")
+    val expectedResult = Seq.fill(7)(Row("1567363852000"))
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  DATE_PART (
+         |    epoch_millisecond,
+         |    CONVERT_TIMEZONE (
+         |      "SUBQUERY_0"."TZ" ,
+         |      TO_TIMESTAMP ( "SUBQUERY_0"."DT" , "SUBQUERY_0"."FMT" ) ,
+         |    )
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+  }
+
   test("AIQ test pushdown date_to_string") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(ts bigint, fmt string, tz string)")
     jdbcUpdate(s"insert into $test_table_date values " +
       s"""
-         |(1567363852000, 'yyyy-mm-dd', 'America/New_York'),
+         |(1567363852000, 'MM', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd', 'America/New_York'),
          |(1567363852000, 'YYYY-MM-DD', 'America/New_York'),
          |(1567363852000, 'yyyy-MM-dd HH:mm', 'America/New_York'),
          |(1567363852000, 'yyyy-MM-dd hh:mm a', 'America/New_York'),
-         |(1567363852000, 'yyyy-mm-dd a hh:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd a hh:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd a hh:mm:mm:ss a', 'America/New_York')
          |(1567363852000, 'yyyy-MM-dd HH:mm:ss', 'America/New_York'),
-         |(1567363852000, 'yyyy-mm-dd hh:mm:ss', 'America/New_York')
+         |(1567363852000, 'yyyy-MM-dd hh:mm:ss', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd hh:mm:mm:ss', 'America/New_York')
          |""".stripMargin.linesIterator.mkString(" ").trim
     )
 
@@ -329,13 +374,16 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
     val resultDF = tmpDF.selectExpr("aiq_date_to_string(ts, fmt, tz)")
     val expectedResult = Seq(
+      Row("09"),
       Row("2019-09-01"),
       Row("2019-09-01"),
       Row("2019-09-01 14:50"),
       Row("2019-09-01 02:50 PM"),
       Row("2019-09-01 PM 02:50"),
+      Row("2019-09-01 PM 02:50 PM"),
       Row("2019-09-01 14:50:52"),
       Row("2019-09-01 02:50:52"),
+      Row("2019-09-01 02:50:50:52"),
     )
 
     testPushdown(
@@ -343,19 +391,13 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |SELECT (
          |  TO_CHAR (
          |    TO_TIMESTAMP (
-         |      CONVERT_TIMEZONE ("SUBQUERY_0"."TZ", CAST ("SUBQUERY_0"."TS" AS NUMBER) ::varchar)
-         |    ),
-         |    REGEXP_REPLACE (
-         |      REPLACE (
-         |        REPLACE (
-         |          REPLACE ("SUBQUERY_0"."FMT", 'HH', 'HH24') , 'hh', 'HH12'
-         |        ) , 'a', 'AM'
-         |      ) , 'mm', 'mi', '1', '2'
-         |    )
+         |      CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , CAST ( "SUBQUERY_0"."TS" AS NUMBER ) ::varchar )
+         |    ) ,
+         |    "SUBQUERY_0"."FMT" ,
          |  )
          |) AS "SUBQUERY_1_COL_0"
-         |FROM (SELECT * FROM ($test_table_date) AS "SF_CONNECTOR_QUERY_ALIAS") AS "SUBQUERY_0"
-         |""".stripMargin.linesIterator.mkString("").trim,
+         |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
       expectedResult
     )
