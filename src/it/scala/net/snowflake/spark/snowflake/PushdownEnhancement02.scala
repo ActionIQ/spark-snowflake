@@ -306,6 +306,147 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown string_to_date") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(dt string, fmt string, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-09-01 14:50', 'yyyy-MM-dd HH:mm', 'America/New_York'),
+         |('2019-09-01 02:50 PM', 'yyyy-MM-dd hh:mm a', 'America/New_York'),
+         |('2019-09-01 PM 02:50', 'yyyy-MM-dd a hh:mm', 'America/New_York')
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_string_to_date(dt, fmt, tz)")
+    val expectedResult = Seq(
+      Row(1567363800000L),
+      Row(1567363800000L),
+      Row(1567363800000L),
+    )
+    checkAnswer(resultDF, expectedResult)
+
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      "(dt string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      "('2019-09-01 14:50:52')")
+
+    val pushDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val pushResultDF = pushDf.selectExpr(
+      "aiq_string_to_date(dt, 'yyyy-MM-dd HH:mm:ss', 'America/New_York')"
+    )
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  DATE_PART (
+         |    epoch_millisecond ,
+         |    CONVERT_TIMEZONE (
+         |      'America/New_York' ,
+         |      'UTC' ,
+         |      TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."DT" , 'yyyy-MM-dd HH24:mi:SS' )
+         |    )
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      pushResultDF,
+      Seq(Row(1567363852000L))
+    )
+  }
+
+  test("AIQ test pushdown date_to_string") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(ts bigint, fmt string, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |(1567363852000, 'MM', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd HH:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd hh:mm a', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd a hh:mm', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd a hh:mm:mm:ss a', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd HH:mm:ss', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd hh:mm:ss', 'America/New_York'),
+         |(1567363852000, 'yyyy-MM-dd hh:mm:mm:ss', 'America/New_York')
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_date_to_string(ts, fmt, tz)")
+    val expectedResult = Seq(
+      Row("09"),
+      Row("2019-09-01"),
+      Row("2019-09-01 14:50"),
+      Row("2019-09-01 02:50 PM"),
+      Row("2019-09-01 PM 02:50"),
+      Row("2019-09-01 PM 02:50:50:52 PM"),
+      Row("2019-09-01 14:50:52"),
+      Row("2019-09-01 02:50:52"),
+      Row("2019-09-01 02:50:50:52"),
+    )
+    checkAnswer(resultDF, expectedResult)
+
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      "(ts bigint)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      "(1567363852000)")
+
+    val pushDf = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val pushResultDF = pushDf.select(
+      aiq_date_to_string(col("ts"), "MM", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm a", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd a hh:mm", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd a hh:mm:mm:ss a", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:mm:ss", "America/New_York"),
+    )
+    val pushExpectedResult = Seq(Row(expectedResult.map(_.getString(0)): _*))
+    checkAnswer(pushResultDF, pushExpectedResult)
+
+    val finalPushResultDF = pushDf.select(
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York")
+    )
+    testPushdown(
+      s"""
+         |SELECT (
+         |  TO_CHAR (
+         |    TO_TIMESTAMP (
+         |      CONVERT_TIMEZONE ( 'America/New_York' , CAST ( "SUBQUERY_0"."TS" AS NUMBER ) ::varchar )
+         |    ) ,
+         |    'yyyy-MM-dd HH24:mi:SS'
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      finalPushResultDF,
+      Seq(Row("2019-09-01 14:50:52"))
+    )
+  }
+
   test("test pushdown functions date_add/date_sub") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(d1 date)")
