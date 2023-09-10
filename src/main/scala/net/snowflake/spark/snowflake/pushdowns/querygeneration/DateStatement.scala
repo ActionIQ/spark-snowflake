@@ -113,7 +113,7 @@ private[querygeneration] object DateStatement {
 
       /*
       --- spark.sql(
-      ---   "select aiq_string_to_date('2019-09-01 14:50:52', 'yyyy-MM-dd hh:mm:ss', 'America/New_York')"
+      ---   "select aiq_string_to_date('2019-09-01 14:50:52', 'yyyy-MM-dd HH:mm:ss', 'America/New_York')"
       --- ).as[Long].collect.head == 1567363852000L
       select DATE_PART(
         epoch_millisecond,
@@ -121,7 +121,7 @@ private[querygeneration] object DateStatement {
           'America/New_York',
           TO_TIMESTAMP(
             '2019-09-01 14:50:52',
-            'yyyy-MM-dd hh:mm:ss'
+            'yyyy-MM-dd HH:mm:ss'
           )
         )
       )
@@ -136,12 +136,13 @@ private[querygeneration] object DateStatement {
             functionStatement(
               "CONVERT_TIMEZONE",
               Seq(
-                convertStatement(timezoneStr, fields),
+                convertStatement(timezoneStr, fields), // time zone of the input timestamp
+                ConstantString("'UTC'").toStatement, // time zone to be converted
                 functionStatement(
-                  "TO_TIMESTAMP",
+                  "TO_TIMESTAMP_NTZ", // timestamp with no time zone
                   Seq(
                     convertStatement(dateStr, fields),
-                    ConstantString(format).toStatement,
+                    ConstantString(s"'$format'").toStatement,
                   )
                 ),
               ),
@@ -181,7 +182,7 @@ private[querygeneration] object DateStatement {
                 )
               )
             ),
-            ConstantString(format).toStatement,
+            ConstantString(s"'$format'").toStatement,
           )
         )
 

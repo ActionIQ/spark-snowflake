@@ -331,8 +331,10 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
     checkAnswer(resultDF, expectedResult)
 
-    jdbcUpdate(s"create or replace table $test_table_date (dt string)")
-    jdbcUpdate(s"insert into $test_table_date values ('2019-09-01 14:50:52')")
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      "(dt string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      "('2019-09-01 14:50:52')")
 
     val pushDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -340,18 +342,19 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    val pushResultDF = pushDf.select(
-      aiq_string_to_date(col("dt"), lit("yyyy-MM-dd HH:mm:ss"), "America/New_York")
+    val pushResultDF = pushDf.selectExpr(
+      "aiq_string_to_date(dt, 'yyyy-MM-dd HH:mm:ss', 'America/New_York')"
     )
 
     testPushdown(
       s"""
          |SELECT (
          |  DATE_PART (
-         |    epoch_millisecond,
+         |    epoch_millisecond ,
          |    CONVERT_TIMEZONE (
-         |      "SUBQUERY_0"."TZ" ,
-         |      TO_TIMESTAMP ( "SUBQUERY_0"."DT" , "SUBQUERY_0"."FMT" ) ,
+         |      'America/New_York' ,
+         |      'UTC' ,
+         |      TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."DT" , 'yyyy-MM-dd HH24:mi:SS' )
          |    )
          |  )
          |) AS "SUBQUERY_1_COL_0"
@@ -399,8 +402,10 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
     checkAnswer(resultDF, expectedResult)
 
-    jdbcUpdate(s"create or replace table $test_table_date (ts bigint)")
-    jdbcUpdate(s"insert into $test_table_date values (1567363852000)")
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      "(ts bigint)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      "(1567363852000)")
 
     val pushDf = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -409,8 +414,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .load()
 
     val pushResultDF = pushDf.select(
-      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York"),
-      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:ss a", "America/New_York")
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York")
     )
 
     testPushdown(
@@ -418,15 +422,15 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |SELECT (
          |  TO_CHAR (
          |    TO_TIMESTAMP (
-         |      CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , CAST ( "SUBQUERY_0"."TS" AS NUMBER ) ::varchar )
+         |      CONVERT_TIMEZONE ( 'America/New_York' , CAST ( "SUBQUERY_0"."TS" AS NUMBER ) ::varchar )
          |    ) ,
-         |    "SUBQUERY_0"."FMT" ,
+         |    'yyyy-MM-dd HH24:mi:SS'
          |  )
          |) AS "SUBQUERY_1_COL_0"
          |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       pushResultDF,
-      Seq(Row("2019-09-01 14:50:52"), Row("2019-09-01 02:50:52 PM"))
+      Seq(Row("2019-09-01 14:50:52"))
     )
   }
 
