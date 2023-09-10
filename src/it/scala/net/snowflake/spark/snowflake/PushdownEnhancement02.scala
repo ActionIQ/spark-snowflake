@@ -414,9 +414,22 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .load()
 
     val pushResultDF = pushDf.select(
+      aiq_date_to_string(col("ts"), "MM", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm a", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd a hh:mm", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd a hh:mm:mm:ss a", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:mm:ss", "America/New_York"),
+    )
+    val pushExpectedResult = Seq(Row(expectedResult.map(_.getString(0)).mkString(",")))
+    checkAnswer(pushResultDF, pushExpectedResult)
+
+    val finalPushResultDF = pushDf.select(
       aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York")
     )
-
     testPushdown(
       s"""
          |SELECT (
@@ -429,7 +442,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_1_COL_0"
          |FROM ( SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      pushResultDF,
+      finalPushResultDF,
       Seq(Row("2019-09-01 14:50:52"))
     )
   }

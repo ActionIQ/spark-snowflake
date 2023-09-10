@@ -119,7 +119,8 @@ private[querygeneration] object DateStatement {
         epoch_millisecond,
         CONVERT_TIMEZONE(
           'America/New_York',
-          TO_TIMESTAMP(
+          'UTC',
+          TO_TIMESTAMP_NTZ(
             '2019-09-01 14:50:52',
             'yyyy-MM-dd HH:mm:ss'
           )
