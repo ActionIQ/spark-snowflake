@@ -23,6 +23,7 @@ private[querygeneration] object DateStatement {
       .replaceAll("hh", "HH12") // Snowflake Two digits for hour (01 through 12)
       .replaceAll("a", "AM")    // Snowflake Ante meridiem (am) / post meridiem (pm)
       .replaceAll("mm", "mi")   // Snowflake Two digits for minute (00 through 59)
+      .replaceAll("ss", "SS")   // Snowflake Two digits for second (00 through 59)
   }
 
   def unapply(
