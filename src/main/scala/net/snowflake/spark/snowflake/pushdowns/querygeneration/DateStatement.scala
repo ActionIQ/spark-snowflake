@@ -3,6 +3,8 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
 import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
+import java.time.format
+
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
   // DateAdd's pretty name in Spark is "date_add",
@@ -19,14 +21,14 @@ private[querygeneration] object DateStatement {
     */
   private def sparkDateFmtToSnowflakeDateFmt(format: String): String = {
     format
-      .replaceAll("HH", "HH24")         // Snowflake Two digits for hour (00 through 23)
-      .replaceAll("hh", "HH12")         // Snowflake Two digits for hour (01 through 12)
-      .replaceAll("a", "AM")            // Snowflake Ante meridiem (am) / post meridiem (pm)
-      .replaceAll("mm", "mi")           // Snowflake Two digits for minute (00 through 59)
-      .replaceAll("ss", "SS")           // Snowflake Two digits for second (00 through 59)
-      .replaceAll("[^E]EEE[^E]", "DY")  // Snowflake Abbreviated day of week
-      .replaceAll("[^M]MMM[^M]", "MON") // Snowflake Abbreviated month name
-      .replaceAll("[^M]M[^M]","MM")     // Snowflake Two-digit month
+      .replaceAll("HH", "HH24")            // Snowflake Two digits for hour (00 through 23)
+      .replaceAll("hh", "HH12")            // Snowflake Two digits for hour (01 through 12)
+      .replaceAll("a", "AM")               // Snowflake Ante meridiem (am) / post meridiem (pm)
+      .replaceAll("mm", "mi")              // Snowflake Two digits for minute (00 through 59)
+      .replaceAll("ss", "SS")              // Snowflake Two digits for second (00 through 59)
+      .replaceAll("[^M]M[^M]", "MM")       // Snowflake Two-digit month => M -> MM
+      .replaceAll("[^M]M{3}[^M]", "MON")   // Snowflake Abbreviated month name => MMM -> MON
+      .replaceAll("E{1,3}", "DY")          // Snowflake Abbreviated day of week
   }
 
   def unapply(

@@ -425,8 +425,10 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:mm:ss", "America/New_York"),
       aiq_date_to_string(col("ts"), "yyyy-MM-dd M hh:mm:mm:ss", "America/New_York"),
       aiq_date_to_string(col("ts"), "yyyy-MM-dd MM hh:mm:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMM hh:mm:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMMM hh:mm:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMMMMM hh:mm:mm:ss", "America/New_York"),
     )
-    v
     val pushExpectedResult = Seq(Row(expectedResult.map(_.getString(0)): _*))
     checkAnswer(pushResultDF, pushExpectedResult)
 
