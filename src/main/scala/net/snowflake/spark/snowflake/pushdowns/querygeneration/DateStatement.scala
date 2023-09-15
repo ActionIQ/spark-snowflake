@@ -19,14 +19,14 @@ private[querygeneration] object DateStatement {
     */
   private def sparkDateFmtToSnowflakeDateFmt(format: String): String = {
     format
-      .replaceAll("HH", "HH24")        // Snowflake Two digits for hour (00 through 23)
-      .replaceAll("hh", "HH12")        // Snowflake Two digits for hour (01 through 12)
-      .replaceAll("a", "AM")           // Snowflake Ante meridiem (am) / post meridiem (pm)
-      .replaceAll("mm", "mi")          // Snowflake Two digits for minute (00 through 59)
-      .replaceAll("ss", "SS")          // Snowflake Two digits for second (00 through 59)
-      .replaceAll("EEE", "DY")         // Snowflake Abbreviated day of week
-      .replaceAll("MMM", "MON")        // Snowflake Abbreviated month name
-      .replaceAll("\\sM\\s", " MM ")   // Snowflake Two-digit month
+      .replaceAll("HH", "HH24")         // Snowflake Two digits for hour (00 through 23)
+      .replaceAll("hh", "HH12")         // Snowflake Two digits for hour (01 through 12)
+      .replaceAll("a", "AM")            // Snowflake Ante meridiem (am) / post meridiem (pm)
+      .replaceAll("mm", "mi")           // Snowflake Two digits for minute (00 through 59)
+      .replaceAll("ss", "SS")           // Snowflake Two digits for second (00 through 59)
+      .replaceAll("[^E]EEE[^E]", "DY")  // Snowflake Abbreviated day of week
+      .replaceAll("[^M]MMM[^M]", "MON") // Snowflake Abbreviated month name
+      .replaceAll("[^M]M[^M]","MM")     // Snowflake Two-digit month
   }
 
   def unapply(
