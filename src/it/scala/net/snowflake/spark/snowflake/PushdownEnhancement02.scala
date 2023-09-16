@@ -435,7 +435,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       aiq_date_to_string(col("ts"), "yyyy-MM-dd EEEE HH:mm:ss", "America/New_York"),
       aiq_date_to_string(col("ts"), "yyyy-MM-dd EEEEEEEE HH:mm:ss", "America/New_York"),
     )
-    val extraFormattingExpectedResul = Seq(
+    val extraFormattingExpectedResults = Seq(
       "2019-09-01 09 14:50:52",
       "2019-09-01 09 14:50:52",
       "2019-09-01 Sep 14:50:52",
@@ -449,7 +449,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       "2019-09-01 Sunday 14:50:52",
     )
     val pushExpectedResult = Seq(
-      Row(expectedResult.map(_.getString(0)) ++ extraFormattingExpectedResul: _*)
+      Row(expectedResult.map(_.getString(0)) ++ extraFormattingExpectedResults: _*)
     )
     checkAnswer(pushResultDF, pushExpectedResult)
 
