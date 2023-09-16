@@ -449,7 +449,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       "2019-09-01 Sunday 14:50:52",
     )
     val pushExpectedResult = Seq(
-      Row(expectedResult.map(_.getString(0)): _*, extraFormattingExpectedResul: _*)
+      Row(expectedResult.map(_.getString(0)) ++ extraFormattingExpectedResul: _*)
     )
     checkAnswer(pushResultDF, pushExpectedResult)
 
