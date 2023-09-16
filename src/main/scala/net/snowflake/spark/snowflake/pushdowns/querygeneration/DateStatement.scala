@@ -19,14 +19,22 @@ private[querygeneration] object DateStatement {
     */
   private def sparkDateFmtToSnowflakeDateFmt(format: String): String = {
     format
-      .replaceAll("HH", "HH24")            // Snowflake Two digits for hour (00 through 23)
-      .replaceAll("hh", "HH12")            // Snowflake Two digits for hour (01 through 12)
-      .replaceAll("mm", "mi")              // Snowflake Two digits for minute (00 through 59)
-      .replaceAll("ss", "SS")              // Snowflake Two digits for second (00 through 59)
-      .replaceAll("[^M]M[^M]", "MM")       // Snowflake Two-digit month => M -> MM
-      .replaceAll("[^M]M{3}[^M]", "MON")   // Snowflake Abbreviated month name => MMM -> MON
-      .replaceAll("E{1,3}", "DY")          // Snowflake Abbreviated day of week
-      .replaceAll("a", "AM")               // Snowflake Ante meridiem (am) / post meridiem (pm)
+      // Snowflake Two digits for hour (00 through 23)
+      .replaceAll("HH", "HH24")
+      // Snowflake Two digits for hour (01 through 12)
+      .replaceAll("hh", "HH12")
+      // Snowflake Two digits for minute (00 through 59)
+      .replaceAll("mm", "mi")
+      // Snowflake Two digits for second (00 through 59)
+      .replaceAll("ss", "SS")
+      // Snowflake Two-digit month => M -> MM
+      .replaceAll("(?<=[^M])M(?=[^M])", "MM")
+      // Snowflake Abbreviated month name => MMM -> MON
+      .replaceAll("(?<=[^M])M{3}(?=[^M])", "MON")
+      // Snowflake Abbreviated day of week
+      .replaceAll("E{1,3}", "DY")
+      // Snowflake Ante meridiem (am) / post meridiem (pm)
+      .replaceAll("a", "AM")
   }
 
   def unapply(
