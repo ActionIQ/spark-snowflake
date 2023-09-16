@@ -3,8 +3,6 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
 import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
-import java.time.format
-
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
   // DateAdd's pretty name in Spark is "date_add",
