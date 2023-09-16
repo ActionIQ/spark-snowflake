@@ -21,7 +21,7 @@ val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion
 val defaultScalaVersion = "2.12.15"
 
 // increment this version when making a new release
-val sparkConnectorVersion = "2.9.3-aiq9"
+val sparkConnectorVersion = "2.9.3-aiq10"
 
 // keep in sync with spark version
 val fasterXmlVer = "2.9.10"
