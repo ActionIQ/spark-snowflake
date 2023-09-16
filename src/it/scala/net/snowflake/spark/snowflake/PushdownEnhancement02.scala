@@ -423,8 +423,38 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       aiq_date_to_string(col("ts"), "yyyy-MM-dd HH:mm:ss", "America/New_York"),
       aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:ss", "America/New_York"),
       aiq_date_to_string(col("ts"), "yyyy-MM-dd hh:mm:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd M HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MM HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd aMa HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMM HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd aMMMa HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMMM HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMMMM HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd MMMMMM HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd E HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd EE HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd EEE HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd EEEE HH:mm:ss", "America/New_York"),
+      aiq_date_to_string(col("ts"), "yyyy-MM-dd EEEEEEEE HH:mm:ss", "America/New_York"),
     )
-    val pushExpectedResult = Seq(Row(expectedResult.map(_.getString(0)): _*))
+    val extraFormattingExpectedResults = Seq(
+      "2019-09-01 09 14:50:52",
+      "2019-09-01 09 14:50:52",
+      "2019-09-01 PM09PM 14:50:52",
+      "2019-09-01 Sep 14:50:52",
+      "2019-09-01 PMSepPM 14:50:52",
+      "2019-09-01 September 14:50:52",
+      "2019-09-01 SeptemberM 14:50:52",
+      "2019-09-01 September 14:50:52",
+      "2019-09-01 Sun 14:50:52",
+      "2019-09-01 Sun 14:50:52",
+      "2019-09-01 Sun 14:50:52",
+      "2019-09-01 Sunday 14:50:52",
+      "2019-09-01 Sunday 14:50:52",
+    )
+    val pushExpectedResult = Seq(
+      Row(expectedResult.map(_.getString(0)) ++ extraFormattingExpectedResults: _*)
+    )
     checkAnswer(pushResultDF, pushExpectedResult)
 
     val finalPushResultDF = pushDf.select(
