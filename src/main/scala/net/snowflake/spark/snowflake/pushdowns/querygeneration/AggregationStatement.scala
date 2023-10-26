@@ -37,6 +37,11 @@ private[querygeneration] object AggregationStatement {
                 blockStatement(
                   distinct + convertStatements(fields, agg_fun.children: _*)
                 )
+            case _: HyperLogLogPlusPlus =>
+              // NOTE: We are not passing through the other parameters in Spark's HLL
+              // like mutableAggBufferOffset and inputAggBufferOffset
+              ConstantString("HLL") +
+                blockStatement(convertStatements(fields, agg_fun.children: _*))
             case _ =>
               // This exception is not a real issue. It will be caught in
               // QueryBuilder.treeRoot and a telemetry message will be sent if
