@@ -304,10 +304,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // select(hll("subquery_1"."subquery_1_col_0"))as"subquery_2_col_0"
-    // from(select("subquery_0"."s")as"subquery_1_col_0"from
-    // (select*from(test_table_date_9196197740175164745)as"sf_connector_query_alias")as"subquery_0")
-    // as"subquery_1"limit1
     val pushDf = tmpDF.selectExpr("approx_count_distinct(s)")
     testPushdown(
       s"""
@@ -315,8 +311,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |FROM (
          |  SELECT ( "SUBQUERY_0"."S" ) AS "SUBQUERY_1_COL_0"
          |  FROM (
-         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" AS "SUBQUERY_0"
-         |  ) AS "SUBQUERY_0"
+         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |  ) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin,
       pushDf,
       Seq(Row(2))
@@ -329,8 +325,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |FROM (
          |  SELECT ( "SUBQUERY_0"."I" ) AS "SUBQUERY_1_COL_0"
          |  FROM (
-         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" AS "SUBQUERY_0"
-         |  ) AS "SUBQUERY_0"
+         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |  ) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin,
       pushDf2,
       Seq(Row(3))
