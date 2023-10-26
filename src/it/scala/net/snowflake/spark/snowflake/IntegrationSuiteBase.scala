@@ -21,7 +21,6 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
-import org.slf4j.LoggerFactory
 
 import scala.util.matching.Regex
 
@@ -47,6 +46,15 @@ trait IntegrationSuiteBase
         s"fs.azure.sas.$container.$account.$endpoint"
       case _ => throw new IllegalArgumentException(s"invalid wasb url: $input")
     }
+  }
+
+  /**
+   * Only verifies the SQL generation, not the result
+   */
+  def testPushdownSql(query: String, result: DataFrame): Unit = {
+    val _ = result.collect()
+    val potentialQuery = query.trim.replaceAll("\\s+", "").toLowerCase
+    assert(potentialQuery == Utils.getLastSelect.replaceAll("\\s+", "").toLowerCase)
   }
 
   /**

@@ -290,49 +290,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
-  test("AIQ test approx_count_dist") {
-    jdbcUpdate(s"create or replace table $test_table_date (s string, i int)")
-    jdbcUpdate(s"insert into $test_table_date values ('hello world', 0)")
-    jdbcUpdate(s"insert into $test_table_date values ('hello world', 0)")
-    jdbcUpdate(s"insert into $test_table_date values ('hello blah', 1)")
-    jdbcUpdate(s"insert into $test_table_date values ('hello blah', 1)")
-    jdbcUpdate(s"insert into $test_table_date values ('hello blah', 2)")
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_date)
-      .load()
-
-    val pushDf = tmpDF.selectExpr("approx_count_distinct(s)")
-    testPushdown(
-      s"""
-         |SELECT ( HLL ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ) AS "SUBQUERY_2_COL_0"
-         |FROM (
-         |  SELECT ( "SUBQUERY_0"."S" ) AS "SUBQUERY_1_COL_0"
-         |  FROM (
-         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-         |  ) AS "SUBQUERY_1" LIMIT 1
-         |""".stripMargin,
-      pushDf,
-      Seq(Row(2))
-    )
-
-    val pushDf2 = tmpDF.selectExpr("approx_count_distinct(i)")
-    testPushdown(
-      s"""
-         |SELECT ( HLL ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ) AS "SUBQUERY_2_COL_0"
-         |FROM (
-         |  SELECT ( "SUBQUERY_0"."I" ) AS "SUBQUERY_1_COL_0"
-         |  FROM (
-         |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
-         |  ) AS "SUBQUERY_1" LIMIT 1
-         |""".stripMargin,
-      pushDf2,
-      Seq(Row(3))
-    )
-  }
-
   test("AIQ test pushdown instr") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(s string)")
@@ -953,6 +910,58 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     // ByPass query text check for COPY UNLOAD
     testPushdownMultiplefQueries(expectedQueries2, df2, expectedResult2,
       bypass = params.useCopyUnload)
+  }
+
+  test("AIQ test approx_count_dist") {
+    jdbcUpdate(s"create or replace table $test_table_date (s string, i int)")
+    (0 until 100).foreach { i =>
+      if (i % 5 == 0) {
+        jdbcUpdate(s"insert into $test_table_date values ('hello $i', $i)")
+      }
+      jdbcUpdate(s"insert into $test_table_date values ('hello $i', ${i.max(30)})")
+    }
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    {
+      val pushDf = tmpDF.selectExpr("approx_count_distinct(s)")
+      testPushdownSql(
+        s"""
+           |SELECT ( HLL ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ) AS "SUBQUERY_2_COL_0"
+           |FROM (
+           |  SELECT ( "SUBQUERY_0"."S" ) AS "SUBQUERY_1_COL_0"
+           |  FROM (
+           |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+           |  ) AS "SUBQUERY_1" LIMIT 1
+           |""".stripMargin,
+        pushDf,
+      )
+      val approxCount = pushDf.collect().head.getLong(0)
+      // approx_count_distinct is not accurate, so we just check the range
+      assert(approxCount > 90 && approxCount < 130)
+    }
+
+    {
+      val pushDf = tmpDF.selectExpr("approx_count_distinct(i)")
+      testPushdownSql(
+        s"""
+           |SELECT ( HLL ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ) AS "SUBQUERY_2_COL_0"
+           |FROM (
+           |  SELECT ( "SUBQUERY_0"."I" ) AS "SUBQUERY_1_COL_0"
+           |  FROM (
+           |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+           |  ) AS "SUBQUERY_1" LIMIT 1
+           |""".stripMargin,
+        pushDf,
+      )
+      val approxCount = pushDf.collect().head.getLong(0)
+      // approx_count_distinct is not accurate, so we just check the range
+      assert(approxCount > 50 && approxCount < 90)
+    }
   }
 
   override def beforeEach(): Unit = {
