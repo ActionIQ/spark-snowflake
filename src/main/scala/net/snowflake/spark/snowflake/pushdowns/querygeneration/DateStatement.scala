@@ -249,7 +249,7 @@ private[querygeneration] object DateStatement {
         functionStatement(
           "DATEDIFF",
           Seq(
-            ConstantString("day").toStatement,
+            ConstantString("'day'").toStatement,
             startTimestampStm,
             endTimestampStm,
           )

@@ -317,7 +317,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       s"""
          |SELECT (
          |  DATEDIFF (
-         |    day ,
+         |    'day' ,
          |    TO_TIMESTAMP (
          |      CONVERT_TIMEZONE (
          |        "SUBQUERY_0"."TZ" ,
