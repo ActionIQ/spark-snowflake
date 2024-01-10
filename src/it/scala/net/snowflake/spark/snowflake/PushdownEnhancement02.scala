@@ -298,7 +298,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         |(1693609200000, 1693616400000, 'UTC'),
         |(1693609200000, 1693616400000, 'EST'),
         |(1693609200000, NULL, 'UTC'),
-        |(NULL, 1693616400000, NULL),
+        |(NULL, 1693616400000, 'UTC'),
         |(1693609200000, 1693616400000, NULL)
         |""".stripMargin.linesIterator.mkString(" ").trim
     )
