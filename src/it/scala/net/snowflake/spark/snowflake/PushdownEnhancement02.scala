@@ -290,6 +290,54 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown day_diff") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(startMs bigint, endMs bigint, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+        |(1693609200000, 1693616400000, 'UTC'),
+        |(1693609200000, 1693616400000, 'EST')
+        |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_day_diff(startMs, endMs, tz)")
+    val expectedResult = Seq(
+      Row(1L),
+      Row(0L),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  DATEDIFF (
+         |    day ,
+         |    TO_TIMESTAMP (
+         |      CONVERT_TIMEZONE (
+         |        "SUBQUERY_0"."TZ" ,
+         |        CAST ( "SUBQUERY_0"."STARTMS" AS NUMBER ) ::varchar )
+         |    ) ,
+         |    TO_TIMESTAMP (
+         |      CONVERT_TIMEZONE (
+         |        "SUBQUERY_0"."TZ" ,
+         |        CAST ( "SUBQUERY_0"."ENDMS" AS NUMBER ) ::varchar ) )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0" FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+  }
+
+
   test("AIQ test pushdown instr") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(s string)")
