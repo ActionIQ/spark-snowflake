@@ -204,7 +204,7 @@ private[querygeneration] object DateStatement {
       ---   """select aiq_day_diff(1693609200000, 1693616400000, 'UTC')"""
       --- ).as[Long].collect.head == 1
       select DATEDIFF(
-        "DAY",
+        'day',
         TO_TIMESTAMP(
           CONVERT_TIMEZONE(
             'UTC',
