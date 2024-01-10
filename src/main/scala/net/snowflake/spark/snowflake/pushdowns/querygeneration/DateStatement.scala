@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayDiff, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -195,6 +195,63 @@ private[querygeneration] object DateStatement {
               )
             ),
             ConstantString(s"'$format'").toStatement,
+          )
+        )
+
+      /*
+      --- 2023-09-01 to 2023-09-02
+      --- spark.sql(
+      ---   """select aiq_day_diff(1693609200000, 1693616400000, 'UTC')"""
+      --- ).as[Long].collect.head == 1
+      select DATEDIFF(
+        'day',
+        TO_TIMESTAMP(
+          CONVERT_TIMEZONE(
+            'UTC',
+            1693609200000::varchar
+          )
+        ),
+        TO_TIMESTAMP(
+          CONVERT_TIMEZONE(
+            'UTC',
+            1693616400000::varchar
+          )
+        )
+      )
+      -- 1
+      */
+      case AiqDayDiff(startTimestampLong, endTimestampLong, timezoneStr) =>
+        val startTimestampStm = functionStatement(
+          "TO_TIMESTAMP",
+          Seq(
+            functionStatement(
+              "CONVERT_TIMEZONE",
+              Seq(
+                convertStatement(timezoneStr, fields),
+                convertStatement(startTimestampLong, fields) + ConstantString("::varchar"),
+              ),
+            )
+          )
+        )
+        val endTimestampStm = functionStatement(
+          "TO_TIMESTAMP",
+          Seq(
+            functionStatement(
+              "CONVERT_TIMEZONE",
+              Seq(
+                convertStatement(timezoneStr, fields),
+                convertStatement(endTimestampLong, fields) + ConstantString("::varchar"),
+              ),
+            )
+          )
+        )
+
+        functionStatement(
+          "DATEDIFF",
+          Seq(
+            ConstantString("'day'").toStatement,
+            startTimestampStm,
+            endTimestampStm,
           )
         )
 
