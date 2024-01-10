@@ -297,7 +297,9 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       s"""
         |(1693609200000, 1693616400000, 'UTC'),
         |(1693609200000, 1693616400000, 'EST'),
-        |(1693609200000, NULL, 'UTC')
+        |(1693609200000, NULL, 'UTC'),
+        |(NULL, 1693616400000, NULL),
+        |(1693609200000, 1693616400000, NULL)
         |""".stripMargin.linesIterator.mkString(" ").trim
     )
 
@@ -312,6 +314,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     val expectedResult = Seq(
       Row(1L),
       Row(0L),
+      Row(null),
+      Row(null),
       Row(null),
     )
 
