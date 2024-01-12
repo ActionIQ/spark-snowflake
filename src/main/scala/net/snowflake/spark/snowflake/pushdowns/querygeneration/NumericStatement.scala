@@ -59,6 +59,7 @@ private[querygeneration] object NumericStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
+      // https://docs.snowflake.com/en/sql-reference/functions/log
       case Logarithm(base, expr) =>
         functionStatement(
           "LOG",
@@ -99,9 +100,14 @@ private[querygeneration] object NumericStatement {
       case Rand(seed, _) =>
         seed match {
           case _: Expression =>
+            // https://docs.snowflake.com/en/sql-reference/functions/random
+            // Just `RANDOM` returns a pseudo-random 64-bit integer.
+            // Spark's behavior for `rand` is to return a random value with
+            // independent and identically distributed (i.i.d.) uniformly
+            // distributed values in [0, 1).
             // https://docs.snowflake.com/en/sql-reference/functions/uniform
-            // Spark follows the following Snowflake equivalent:
-            //  uniform(0::float, 1::float, random(seed))
+            // Therefore, we use the following Snowflake equivalent:
+            // `uniform(0::float, 1::float, random(seed))`
             functionStatement(
               "UNIFORM",
               Seq(

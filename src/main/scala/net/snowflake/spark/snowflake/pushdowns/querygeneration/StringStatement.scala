@@ -115,8 +115,9 @@ private[querygeneration] object StringStatement {
         ) + escapeClause
 
       // https://docs.snowflake.com/en/sql-reference/functions/reverse
-      // Reverse in Snowflake only supports StringType and DateType
-      // which Spark doesn't
+      // Reverse in Snowflake only supports StringType and DateType.
+      // Spark only supports StringType and ArrayType, thus we only
+      // implement for StringType
       case Reverse(child) =>
         child.dataType match {
           case _: StringType =>
