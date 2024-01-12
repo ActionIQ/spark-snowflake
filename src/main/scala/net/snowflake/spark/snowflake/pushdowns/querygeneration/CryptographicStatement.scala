@@ -37,49 +37,45 @@ private[querygeneration] object CryptographicStatement {
     Option(expr match {
       // https://docs.snowflake.com/en/sql-reference/functions/md5
       case Md5(child) =>
-        child match {
+        val args = child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(c, _: BinaryType, tZ, ansiEn) =>
-            functionStatement(
-              "MD5",
-              Seq(
-                convertStatement(Cast(c, StringType, tZ, ansiEn), fields)
-              ),
-            )
-          case _ => null
+            Seq(convertStatement(Cast(c, StringType, tZ, ansiEn), fields))
+          case childWithoutCast =>
+            Seq(convertStatement(Cast(childWithoutCast, StringType), fields))
         }
+        functionStatement("MD5", args)
 
       // https://docs.snowflake.com/en/sql-reference/functions/sha1
       case Sha1(child) =>
-        child match {
+        val args = child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(c, _: BinaryType, tZ, ansiEn) =>
-            functionStatement(
-              "SHA1",
-              Seq(
-                convertStatement(Cast(c, StringType, tZ, ansiEn), fields)
-              ),
-            )
-          case _ => null
+            Seq(convertStatement(Cast(c, StringType, tZ, ansiEn), fields))
+          case childWithoutCast =>
+            Seq(convertStatement(Cast(childWithoutCast, StringType), fields))
         }
+        functionStatement("SHA1", args)
 
       // https://docs.snowflake.com/en/sql-reference/functions/sha2
       case Sha2(left, right) =>
-        left match {
+        val argsLeft = left match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(l, _: BinaryType, tZ, ansiEn) =>
-            functionStatement(
-              "SHA2",
-              Seq(
-                convertStatement(Cast(l, StringType, tZ, ansiEn), fields),
-                convertStatement(right, fields),
-              ),
-            )
-          case _ => null
+            convertStatement(Cast(l, StringType, tZ, ansiEn), fields)
+          case lWithoutCast =>
+            convertStatement(Cast(lWithoutCast, StringType), fields)
         }
+        functionStatement(
+          "SHA2",
+          Seq(
+            argsLeft,
+            convertStatement(right, fields),
+          ),
+        )
 
       case _ => null
     })
