@@ -1,6 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, SnowflakeFailMessage, SnowflakePushdownUnsupportedException, SnowflakeSQLStatement}
+import net.snowflake.spark.snowflake.{
+  ConstantString,
+  SnowflakeFailMessage,
+  SnowflakePushdownUnsupportedException,
+  SnowflakeSQLStatement
+}
 import org.apache.spark.sql.catalyst.expressions.{
   Ascii,
   Attribute,
