@@ -870,6 +870,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       resultDFSelect,
     )
 
+    assert(tmpDF.where(col("i").isNull).selectExpr("i * rand(0)").head == Row(null))
+
     val resultDFWhere = tmpDF.where("i > rand(0)")
     testPushdownSql(
       s"""
@@ -883,6 +885,71 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |)
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFWhere,
+    )
+
+    assert(resultDFWhere.collect().length == 3)
+  }
+
+  test("AIQ test pushdown log") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(i number)")
+    jdbcUpdate(s"insert into $test_table_date values" +
+      s"""
+         |(2.0),
+         |(3.0),
+         |(4.0),
+         |(NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDFStaticBase = tmpDF.selectExpr("round(log(2, i), 2)")
+    val expectedResultStaticBase = Seq(
+      Row(1.0),
+      Row(1.58),
+      Row(2.0),
+      Row(null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  ROUND ( LOG ( 2.0 , ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) ) ) , 2 )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFStaticBase,
+      expectedResultStaticBase,
+    )
+
+    val resultDFDynamicBase = tmpDF.selectExpr("log(i, i)")
+    val expectedResultDynamicBase = Seq(
+      Row(1.0),
+      Row(1.0),
+      Row(1.0),
+      Row(null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  LOG (
+         |    CAST ( "SUBQUERY_0"."I" AS DOUBLE ) , ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) )
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFDynamicBase,
+      expectedResultDynamicBase,
     )
   }
 
