@@ -71,6 +71,7 @@ private[querygeneration] object StringStatement {
             convertStatement(rightSide, fields)
         )
 
+      // https://docs.snowflake.com/en/sql-reference/functions/concat_ws
       case ConcatWs(children) =>
         if (children.length >= 2) {
           val separator = children.head
@@ -128,6 +129,7 @@ private[querygeneration] object StringStatement {
           case _ => null
         }
 
+      // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
       case _: Uuid => functionStatement("UUID_STRING", Seq())
 
       case _ => null

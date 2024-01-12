@@ -35,6 +35,7 @@ private[querygeneration] object CryptographicStatement {
     val fields = expAttr._2
 
     Option(expr match {
+      // https://docs.snowflake.com/en/sql-reference/functions/md5
       case Md5(child) =>
         child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
@@ -49,6 +50,7 @@ private[querygeneration] object CryptographicStatement {
           case _ => null
         }
 
+      // https://docs.snowflake.com/en/sql-reference/functions/sha1
       case Sha1(child) =>
         child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
@@ -63,6 +65,7 @@ private[querygeneration] object CryptographicStatement {
           case _ => null
         }
 
+      // https://docs.snowflake.com/en/sql-reference/functions/sha2
       case Sha2(left, right) =>
         left match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
