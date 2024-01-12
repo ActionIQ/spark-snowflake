@@ -9,11 +9,14 @@ import net.snowflake.spark.snowflake.{
 import org.apache.spark.sql.catalyst.expressions.{
   Ascii,
   Attribute,
+  Cast,
   Concat,
   ConcatWs,
   Expression,
+  FormatNumber,
   Length,
   Like,
+  Literal,
   Lower,
   Reverse,
   StringInstr,
@@ -131,6 +134,51 @@ private[querygeneration] object StringStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
       case _: Uuid => functionStatement("UUID_STRING", Seq())
+
+      // https://docs.snowflake.com/en/sql-reference/functions/trim
+      // https://docs.snowflake.com/en/sql-reference/functions/to_decimal
+      // https://docs.snowflake.com/en/sql-reference/functions/to_char
+      // https://docs.snowflake.com/en/sql-reference/sql-format-models
+      case FormatNumber(number, precision) =>
+        val precisionOpt = precision match {
+          case p: Literal => Option(p.value).map(_.asInstanceOf[Int])
+          case _ => None
+        }
+
+        val defaultFormat = "9,999,999,999,999,999,999"
+
+        precisionOpt match {
+          case Some(d) =>
+            val sqlFormat = if (d > 0) {
+              defaultFormat.concat(".").concat(Seq.fill(d)("0").mkString(""))
+            } else {
+              defaultFormat
+            }
+
+            // Wrapping around a trim to remove the leading empty spaces
+            // produced by the use of `9` in the default format
+            functionStatement(
+              "TRIM",
+              Seq(
+                functionStatement(
+                  "TO_VARCHAR",
+                  Seq(
+                    functionStatement(
+                      "TO_NUMERIC",
+                      Seq(
+                        convertStatement(Cast(number, StringType), fields),
+                        ConstantString(s"'TM9'").toStatement,
+                        ConstantString("38").toStatement,
+                        convertStatement(precision, fields),
+                      ),
+                    ),
+                    ConstantString(s"'$sqlFormat'").toStatement,
+                  )
+                )
+              ),
+            )
+          case None => null
+        }
 
       case _ => null
     })
