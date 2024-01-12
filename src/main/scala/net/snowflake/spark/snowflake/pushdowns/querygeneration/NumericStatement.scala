@@ -1,39 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  LongVariable,
-  SnowflakeSQLStatement
-}
+import net.snowflake.spark.snowflake.{ConstantString, LongVariable, SnowflakeSQLStatement}
+
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Abs,
-  Acos,
-  Asin,
-  Atan,
-  Attribute,
-  Ceil,
-  CheckOverflow,
-  Cos,
-  Cosh,
-  Exp,
-  Expression,
-  Floor,
-  Greatest,
-  Least,
-  Log,
-  Pi,
-  Pow,
-  PromotePrecision,
-  Rand,
-  Round,
-  Sin,
-  Sinh,
-  Sqrt,
-  Tan,
-  Tanh,
-  UnaryMinus
-}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Exp, Expression, Floor, Greatest, Least, Log, Pi, Pow, PromotePrecision, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh, UnaryMinus}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object NumericStatement {
@@ -56,9 +26,13 @@ private[querygeneration] object NumericStatement {
 
     Option(expr match {
       case _: Abs | _: Acos | _: Cos | _: Tan | _: Tanh | _: Cosh | _: Atan |
-          _: Floor | _: Sin | _: Log | _: Asin | _: Sqrt | _: Ceil | _: Sqrt |
+          _: Floor | _: Sin | _: Asin | _: Sqrt | _: Ceil | _: Sqrt |
           _: Sinh | _: Greatest | _: Least | _: Exp =>
         ConstantString(expr.prettyName.toUpperCase) +
+          blockStatement(convertStatements(fields, expr.children: _*))
+
+      case Log(child) =>
+        ConstantString("LOG") +
           blockStatement(convertStatements(fields, expr.children: _*))
 
       // From spark 3.1, UnaryMinus() has 2 parameters.
@@ -89,11 +63,30 @@ private[querygeneration] object NumericStatement {
       // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
-      // From spark 3.1, Rand() has 2 parameters.
       case Rand(seed, _) =>
-        ConstantString("RANDOM") + blockStatement(
-          LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
-        )
+        seed match {
+          case _: Expression =>
+            // Spark follows the following Snowflake equivalent:
+            //  uniform(0::float, 1::float, random())
+            functionStatement(
+              "UNIFORM",
+              Seq(
+                ConstantString("0::float").toStatement,
+                ConstantString("1::float").toStatement,
+                functionStatement(
+                  "RANDOM",
+                  Seq(convertStatement(seed, fields)),
+                ),
+              ),
+            )
+          // default to old method if new one isn't applicable
+          case _ =>
+            // From spark 3.1, Rand() has 2 parameters.
+            ConstantString("RANDOM") + blockStatement(
+              LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
+            )
+        }
+
       case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
           convertStatements(fields, child, scale)

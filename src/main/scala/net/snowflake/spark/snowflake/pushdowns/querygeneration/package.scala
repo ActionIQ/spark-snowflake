@@ -107,6 +107,7 @@ package object querygeneration {
       case AggregationStatement(stmt) => stmt
       case BasicStatement(stmt) => stmt
       case BooleanStatement(stmt) => stmt
+      case CryptographicStatement(stmt) => stmt
       case DateStatement(stmt) => stmt
       case MiscStatement(stmt) => stmt
       case NumericStatement(stmt) => stmt
