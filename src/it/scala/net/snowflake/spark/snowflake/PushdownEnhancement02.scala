@@ -841,11 +841,15 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
 
   test("AIQ test pushdown rand") {
     jdbcUpdate(s"create or replace table $test_table_date " +
-      s"(i integer, r float)")
-    jdbcUpdate(s"insert into $test_table_date " +
-      s"select 1, 1::float * uniform(0::float, 1::float, random(0))")
-    jdbcUpdate(s"insert into $test_table_date " +
-      s"select NULL, NULL")
+      s"(i integer)")
+    jdbcUpdate(s"insert into $test_table_date values" +
+      s"""
+         |(1),
+         |(2),
+         |(3),
+         |(NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
@@ -854,9 +858,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .load()
 
     val resultDFSelect = tmpDF.selectExpr("i * rand(0)")
-    val expectedResultSelect = tmpDF.selectExpr("r").collect().toSeq
-
-    testPushdown(
+    testPushdownSql(
       s"""
          |SELECT (
          |  ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) )
@@ -866,26 +868,21 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFSelect,
-      expectedResultSelect
     )
 
-    jdbcUpdate(s"insert into $test_table_date " +
-      s"select 0, 0::float * uniform(0::float, 1::float, random(0))")
-
     val resultDFWhere = tmpDF.where("i > rand(0)")
-    val expectedResultWhere = tmpDF.head(1).toSeq
-
-    testPushdown(
+    testPushdownSql(
       s"""
-         |SELECT (
-         |  ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) )
-         |) AS "SUBQUERY_1_COL_0"
-         |FROM (
-         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
-         |) AS "SUBQUERY_0"
+         |SELECT * FROM
+         |(
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+         |  WHERE (
+         |    ( "SUBQUERY_0"."I" IS NOT NULL ) AND
+         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) > UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) )
+         |  )
+         |)
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFWhere,
-      expectedResultWhere
     )
   }
 

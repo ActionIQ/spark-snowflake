@@ -31,7 +31,7 @@ private[querygeneration] object NumericStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
-      case Log(child) =>
+      case _: Log =>
         ConstantString("LOG") +
           blockStatement(convertStatements(fields, expr.children: _*))
 
@@ -79,7 +79,7 @@ private[querygeneration] object NumericStatement {
                 ),
               ),
             )
-          // default to old method if new one isn't applicable
+          // default to original implementation if new one isn't applicable
           case _ =>
             // From spark 3.1, Rand() has 2 parameters.
             ConstantString("RANDOM") + blockStatement(
