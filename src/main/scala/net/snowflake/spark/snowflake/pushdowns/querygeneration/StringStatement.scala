@@ -1,35 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeFailMessage,
-  SnowflakePushdownUnsupportedException,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Ascii,
-  Attribute,
-  Cast,
-  Concat,
-  ConcatWs,
-  Expression,
-  FormatNumber,
-  Length,
-  Like,
-  Literal,
-  Lower,
-  Reverse,
-  StringInstr,
-  StringLPad,
-  StringRPad,
-  StringTranslate,
-  StringTrim,
-  StringTrimLeft,
-  StringTrimRight,
-  Substring,
-  Upper,
-  Uuid
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeFailMessage, SnowflakePushdownUnsupportedException, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Coalesce, Concat, ConcatWs, Expression, FormatNumber, Length, Like, Literal, Lower, Reverse, StringInstr, StringLPad, StringRPad, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper, Uuid}
 import org.apache.spark.sql.types.StringType
 
 /** Extractor for boolean expressions (return true or false). */
@@ -80,22 +52,17 @@ private[querygeneration] object StringStatement {
           val separator = children.head
           val snowStm = children.drop(1).foldLeft(convertStatement(separator, fields)) {
             (currentSnowStm, nextExpr) => mkStatement(
-              Seq(currentSnowStm, convertStatement(nextExpr, fields)), ","
+              Seq(
+                currentSnowStm,
+                // Wrapping around Coalesce to mimic Spark's behavior =>
+                //  in case of null, return empty string ('')
+                convertStatement(Coalesce(Seq(nextExpr, Literal(""))), fields)
+              ),
+              ","
             )
           }
 
-          // Wrapping around Coalesce to mimic Spark's behavior =>
-          //  in case of null, return empty string ('')
-          functionStatement(
-            "COALESCE",
-            Seq(
-              functionStatement(
-                expr.prettyName.toUpperCase,
-                Seq(snowStm),
-              ),
-              ConstantString("''").toStatement,
-            ),
-          )
+          functionStatement(expr.prettyName.toUpperCase, Seq(snowStm))
         } else {
           throw new SnowflakePushdownUnsupportedException(
             SnowflakeFailMessage.FAIL_PUSHDOWN_UNSUPPORTED_CONVERSION,
