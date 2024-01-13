@@ -1,7 +1,33 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, Length, Like, Literal, Lower, Reverse, StringInstr, StringLPad, StringRPad, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, Substring, Upper, Uuid}
+import net.snowflake.spark.snowflake.{
+  ConstantString,
+  SnowflakeSQLStatement
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Ascii,
+  Attribute,
+  Cast,
+  Concat,
+  ConcatWs,
+  Expression,
+  FormatNumber,
+  Length,
+  Like,
+  Literal,
+  Lower,
+  Reverse,
+  StringInstr,
+  StringLPad,
+  StringRPad,
+  StringTranslate,
+  StringTrim,
+  StringTrimLeft,
+  StringTrimRight,
+  Substring,
+  Upper,
+  Uuid
+}
 import org.apache.spark.sql.types.StringType
 
 /** Extractor for boolean expressions (return true or false). */
