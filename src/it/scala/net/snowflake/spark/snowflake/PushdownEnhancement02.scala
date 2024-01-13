@@ -905,23 +905,32 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_number)
       .load()
 
-    // Cannot test the returned values because the `testPushdown` function
-    // checks with and without PushDown enabled and Spark, Snowflake
-    // return different results for the same seed which is expected
-    val resultDFSelect = tmpDF.selectExpr("i * rand(0)")
-    testPushdownSql(
+    val resultDFSelect = tmpDF.selectExpr("round(i * rand(0), 8)")
+    val expectedResultSelect = Seq(
+      Row(0.68002735),
+      Row(1.35410152),
+      Row(8.82875424),
+      Row(null),
+    )
+
+    testPushdown(
       s"""
          |SELECT (
-         |  ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) )
+         |  ROUND (
+         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) ::double ) ,
+         |    8
+         |  )
          |) AS "SUBQUERY_1_COL_0"
          |FROM (
          |  SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFSelect,
+      expectedResultSelect,
+      // Cannot test the returned values against Spark because Spark and
+      // Snowflake return different results for the same seed which is expected
+      testPushdownOff = false,
     )
-
-    assert(tmpDF.where(col("i").isNull).selectExpr("i * rand(0)").head == Row(null))
 
     val resultDFWhere = tmpDF.where("i > rand(0)")
     testPushdownSql(
@@ -931,7 +940,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |  SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |  WHERE (
          |    ( "SUBQUERY_0"."I" IS NOT NULL ) AND
-         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) > UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) )
+         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) > UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) ::double
          |  )
          |)
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
