@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, LongVariable, SnowflakeSQLStatement}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
 
 import scala.language.postfixOps
 import org.apache.spark.sql.catalyst.expressions.{
@@ -98,34 +98,25 @@ private[querygeneration] object NumericStatement {
       case Pi() => ConstantString("PI()") !
 
       case Rand(seed, _) =>
-        seed match {
-          case _: Expression =>
-            // https://docs.snowflake.com/en/sql-reference/functions/random
-            // Just `RANDOM` returns a pseudo-random 64-bit integer.
-            // Spark's behavior for `rand` is to return a random value with
-            // independent and identically distributed (i.i.d.) uniformly
-            // distributed values in [0, 1).
-            // https://docs.snowflake.com/en/sql-reference/functions/uniform
-            // Therefore, we use the following Snowflake equivalent:
-            // `uniform(0::float, 1::float, random(seed))`
+        // https://docs.snowflake.com/en/sql-reference/functions/random
+        // Just `RANDOM` returns a pseudo-random 64-bit integer.
+        // Spark's behavior for `rand` is to return a random value with
+        // independent and identically distributed (i.i.d.) uniformly
+        // distributed values in [0, 1).
+        // https://docs.snowflake.com/en/sql-reference/functions/uniform
+        // Therefore, we use the following Snowflake equivalent:
+        // `uniform(0::float, 1::float, random(seed))`
+        functionStatement(
+          "UNIFORM",
+          Seq(
+            ConstantString("0::float").toStatement,
+            ConstantString("1::float").toStatement,
             functionStatement(
-              "UNIFORM",
-              Seq(
-                ConstantString("0::float").toStatement,
-                ConstantString("1::float").toStatement,
-                functionStatement(
-                  "RANDOM",
-                  Seq(convertStatement(seed, fields)),
-                ),
-              ),
-            )
-          // default to original implementation if new one isn't applicable
-          case _ =>
-            // From spark 3.1, Rand() has 2 parameters.
-            ConstantString("RANDOM") + blockStatement(
-              LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
-            )
-        }
+              "RANDOM",
+              Seq(convertStatement(seed, fields)),
+            ),
+          ),
+        ) + ConstantString("::double").toStatement
 
       case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
