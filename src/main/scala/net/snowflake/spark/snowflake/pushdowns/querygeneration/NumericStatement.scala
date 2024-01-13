@@ -1,10 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  LongVariable,
-  SnowflakeSQLStatement
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+
 import scala.language.postfixOps
 import org.apache.spark.sql.catalyst.expressions.{
   Abs,
@@ -22,6 +19,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Greatest,
   Least,
   Log,
+  Logarithm,
   Pi,
   Pow,
   PromotePrecision,
@@ -56,10 +54,20 @@ private[querygeneration] object NumericStatement {
 
     Option(expr match {
       case _: Abs | _: Acos | _: Cos | _: Tan | _: Tanh | _: Cosh | _: Atan |
-          _: Floor | _: Sin | _: Log | _: Asin | _: Sqrt | _: Ceil | _: Sqrt |
-          _: Sinh | _: Greatest | _: Least | _: Exp =>
+           _: Floor | _: Sin | _: Log | _: Asin | _: Sqrt | _: Ceil | _: Sqrt |
+           _: Sinh | _: Greatest | _: Least | _: Exp =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
+
+      // https://docs.snowflake.com/en/sql-reference/functions/log
+      case Logarithm(base, expr) =>
+        functionStatement(
+          "LOG",
+          Seq(
+            convertStatement(base, fields),
+            blockStatement(convertStatement(expr, fields)),
+          ),
+        )
 
       // From spark 3.1, UnaryMinus() has 2 parameters.
       case UnaryMinus(child, _) =>
@@ -89,11 +97,27 @@ private[querygeneration] object NumericStatement {
       // Suppose connector can't see Pi().
       case Pi() => ConstantString("PI()") !
 
-      // From spark 3.1, Rand() has 2 parameters.
       case Rand(seed, _) =>
-        ConstantString("RANDOM") + blockStatement(
-          LongVariable(Option(seed).map(_.asInstanceOf[Long])) !
-        )
+        // https://docs.snowflake.com/en/sql-reference/functions/random
+        // Just `RANDOM` returns a pseudo-random 64-bit integer.
+        // Spark's behavior for `rand` is to return a random value with
+        // independent and identically distributed (i.i.d.) uniformly
+        // distributed values in [0, 1).
+        // https://docs.snowflake.com/en/sql-reference/functions/uniform
+        // Therefore, we use the following Snowflake equivalent:
+        // `uniform(0::float, 1::float, random(seed))`
+        functionStatement(
+          "UNIFORM",
+          Seq(
+            ConstantString("0::float").toStatement,
+            ConstantString("1::float").toStatement,
+            functionStatement(
+              "RANDOM",
+              Seq(convertStatement(seed, fields)),
+            ),
+          ),
+        ) + ConstantString("::double").toStatement
+
       case Round(child, scale) =>
         ConstantString("ROUND") + blockStatement(
           convertStatements(fields, child, scale)
