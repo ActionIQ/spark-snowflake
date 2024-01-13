@@ -809,36 +809,37 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     testPushdown(
       s"""
          |SELECT
+         |  ( '' ) AS "SUBQUERY_1_COL_0" ,
          |  (
          |    ARRAY_TO_STRING (
          |      ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S" ) ,
          |      '|'
          |    )
-         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  ) AS "SUBQUERY_1_COL_1" ,
          |  (
          |    ARRAY_TO_STRING (
          |      ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ,
          |      '|'
          |    )
-         |  ) AS "SUBQUERY_1_COL_1" ,
+         |  ) AS "SUBQUERY_1_COL_2" ,
          |  (
          |    ARRAY_TO_STRING (
          |      ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ,
          |      '/'
          |    )
-         |  ) AS "SUBQUERY_1_COL_2" ,
+         |  ) AS "SUBQUERY_1_COL_3" ,
          |  (
          |    ARRAY_TO_STRING (
          |      ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ,
          |      NULL
          |    )
-         |  ) AS "SUBQUERY_1_COL_3" ,
+         |  ) AS "SUBQUERY_1_COL_4" ,
          |  (
          |    ARRAY_TO_STRING (
          |      ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" , "SUBQUERY_0"."S" , 'a' ) ,
          |      '/'
          |    )
-         |  ) AS "SUBQUERY_1_COL_4" ,
+         |  ) AS "SUBQUERY_1_COL_5" ,
          |  (
          |    REVERSE (
          |      ARRAY_TO_STRING (
@@ -846,7 +847,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |        '/'
          |      )
          |    )
-         |  ) AS "SUBQUERY_1_COL_5"
+         |  ) AS "SUBQUERY_1_COL_6"
          |FROM (
          |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
@@ -904,29 +905,23 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .option("dbtable", test_table_number)
       .load()
 
-    val resultDFSelect = tmpDF.selectExpr("round(i * rand(0), 8)")
-    val expectedResultSelect = Seq(
-      Row(0.68002735),
-      Row(1.35410152),
-      Row(8.82875424),
-      Row(null),
-    )
-
-    testPushdown(
+    // Cannot test the returned values because the `testPushdown` function
+    // checks with and without PushDown enabled and Spark, Snowflake
+    // return different results for the same seed which is expected
+    val resultDFSelect = tmpDF.selectExpr("i * rand(0)")
+    testPushdownSql(
       s"""
          |SELECT (
-         |  ROUND (
-         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) ::double ) ,
-         |    8
-         |  )
+         |  ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) * UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) )
          |) AS "SUBQUERY_1_COL_0"
          |FROM (
          |  SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFSelect,
-      expectedResultSelect,
     )
+
+    assert(tmpDF.where(col("i").isNull).selectExpr("i * rand(0)").head == Row(null))
 
     val resultDFWhere = tmpDF.where("i > rand(0)")
     testPushdownSql(
@@ -936,7 +931,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |  SELECT * FROM ( $test_table_number ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
          |  WHERE (
          |    ( "SUBQUERY_0"."I" IS NOT NULL ) AND
-         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) > UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) ) ::double
+         |    ( CAST ( "SUBQUERY_0"."I" AS DOUBLE ) > UNIFORM ( 0::float , 1::float , RANDOM ( 0 ) )
          |  )
          |)
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,

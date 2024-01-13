@@ -47,6 +47,10 @@ private[querygeneration] object StringStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/concat_ws
+      // Trying to make `concat_ws` work is not possible so adjusting with the
+      // Snowflake functions below that do the trick and support the behavior
+      // https://docs.snowflake.com/en/sql-reference/functions/array_to_string
+      // https://docs.snowflake.com/en/sql-reference/functions/array_construct_compact
       case ConcatWs(children) =>
         if (children.length >= 2) {
           val separator = children.head
