@@ -775,6 +775,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       .load()
 
     val resultDF = tmpDF.selectExpr(
+      "concat_ws('|')",
       "concat_ws('|', s)",
       "concat_ws('|', s, s)",
       "concat_ws('/', s, s, s)",
@@ -784,6 +785,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
     val expectedResult = Seq(
       Row(
+        "",
         "snowflake",
         "snowflake|snowflake",
         "snowflake/snowflake/snowflake",
@@ -792,6 +794,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         "ekalfwons/ekalfwons/ekalfwons"
       ),
       Row(
+        "",
         "spark",
         "spark|spark",
         "spark/spark/spark",
@@ -799,8 +802,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         "spark/spark/spark/a",
         "kraps/kraps/kraps"
       ),
-      Row("", "|", "//", null, "///a", "//"),
-      Row("", "", "", null, "a", ""),
+      Row("", "", "|", "//", null, "///a", "//"),
+      Row("", "", "", "", null, "a", ""),
     )
 
     testPushdown(
