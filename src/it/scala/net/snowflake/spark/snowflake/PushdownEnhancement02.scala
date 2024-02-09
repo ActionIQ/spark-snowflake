@@ -21,11 +21,8 @@ import java.util.TimeZone
 import net.snowflake.spark.snowflake.Utils.{SNOWFLAKE_SOURCE_NAME, SNOWFLAKE_SOURCE_SHORT_NAME}
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
-
-import scala.reflect.internal.util.TableDef
 
 // scalastyle:off println
 class PushdownEnhancement02 extends IntegrationSuiteBase {
@@ -303,7 +300,6 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
         |""".stripMargin.linesIterator.mkString(" ").trim
     )
 
-
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
@@ -340,6 +336,100 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
       expectedResult
+    )
+  }
+
+  test("AIQ test pushdown week_diff") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(startMs bigint, endMs bigint, tz string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |(1551880107963, 1553890107963, 'UTC'),
+         |(1551880107963, 1553890107963, 'Asia/Ulan_Bator'),
+         |(NULL, 1553890107963, 'UTC'),
+         |(1551880107963, NULL, 'UTC'),
+         |(1551880107963, 1553890107963, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("aiq_week_diff(startMs, endMs, 'sunday', tz)")
+    val expectedResult = Seq(
+      Row(3L),
+      Row(3L),
+      Row(null),
+      Row(null),
+      Row(null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  (
+         |    FLOOR (
+         |      (
+         |        (
+         |          DATEDIFF (
+         |            'day' ,
+         |            TO_TIMESTAMP ( CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , 0 ::varchar ) ) ,
+         |            TO_TIMESTAMP (
+         |              CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , CAST ( "SUBQUERY_0"."ENDMS" AS NUMBER ) ::varchar )
+         |            )
+         |          ) + 4
+         |        ) / 7
+         |      )
+         |    )
+         |    -
+         |    FLOOR (
+         |      (
+         |        (
+         |          DATEDIFF (
+         |            'day' ,
+         |            TO_TIMESTAMP ( CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , 0 ::varchar ) ) ,
+         |            TO_TIMESTAMP (
+         |              CONVERT_TIMEZONE ( "SUBQUERY_0"."TZ" , CAST ( "SUBQUERY_0"."STARTMS" AS NUMBER ) ::varchar )
+         |            )
+         |          ) + 4
+         |        ) / 7
+         |      )
+         |    )
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+
+    assert(
+      tmpDF.limit(1).selectExpr(
+        "aiq_week_diff(startMs, endMs, 'SUNDAY', tz)"
+      ).collect().head == Row(3L)
+    )
+
+    assert(
+      tmpDF.limit(1).selectExpr(
+        "aiq_week_diff(startMs, endMs, 'SUN', tz)"
+      ).collect().head == Row(3L)
+    )
+
+    assert(
+      tmpDF.limit(1).selectExpr(
+        "aiq_week_diff(1567363852000, 1567450252000, 'monday', tz)"
+      ).collect().head == Row(1L)
+    )
+
+    assert(
+      tmpDF.limit(1).selectExpr(
+        "aiq_week_diff(1567363852000, 1567450252000, NULL, tz)"
+      ).collect().head == Row(null)
     )
   }
 

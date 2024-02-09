@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{AddMonths, AiqDateToString, AiqDayDiff, AiqDayStart, AiqStringToDate, Attribute, DateAdd, DateSub, Expression, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, BinaryOperator, DateAdd, DateSub, Divide, Expression, Floor, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -35,6 +35,26 @@ private[querygeneration] object DateStatement {
       .replaceAll("E{1,3}", "DY")
       // Snowflake Ante meridiem (am) / post meridiem (pm)
       .replaceAll("a", "AM")
+  }
+
+  // This is an AIQ map to the offset of the epoch date to the imposed "first day of the week."
+  // (Default Sunday). The Epoch date is a thursday (offset = 0).
+  // scalastyle:off line.size.limit
+  // https://github.com/ActionIQ/aiq/blob/master/libs/flame_utils/src/main/scala/co/actioniq/flame/SqlFunctions.scala#L356-L366
+  // scalastyle:on line.size.limit
+  private def getAiqDayOfWeekFromString(dayStr: String): Int = {
+    val dowString = dayStr.toUpperCase()
+    dowString match {
+      case "SU" | "SUN" | "SUNDAY" => 4
+      case "MO" | "MON" | "MONDAY" => 3
+      case "TU" | "TUE" | "TUESDAY" => 2
+      case "WE" | "WED" | "WEDNESDAY" => 1
+      case "TH" | "THU" | "THURSDAY" => 0
+      case "FR" | "FRI" | "FRIDAY" => 6
+      case "SA" | "SAT" | "SATURDAY" => 5
+      case _ =>
+        throw new IllegalArgumentException(s"""Illegal input for day of week: $dayStr""")
+    }
   }
 
   def unapply(
@@ -254,6 +274,58 @@ private[querygeneration] object DateStatement {
             endTimestampStm,
           )
         )
+
+      /*
+     --- 2023-09-01 to 2023-09-02
+     --- spark.sql(
+     ---   """select aiq_week_diff(1551880107963, 1553890107963, 'sunday', 'UTC')"""
+     --- ).as[Long].collect.head == 3
+     select
+      (
+        (
+          (
+            DATEDIFF (
+              'day',
+              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 0::varchar)) ,
+              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 1551880107963::varchar))
+            ) + 4
+          ) / 7
+        )
+        -
+        (
+          (
+            DATEDIFF (
+              'day' ,
+              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 0::varchar)),
+              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 1553890107963::varchar))
+            ) + 4
+          ) / 7
+        )
+      ) ::int
+     -- 3
+     */
+      case AiqWeekDiff(startTimestampLong, endTimestampLong, startDayStr, timezoneStr)
+        if startDayStr.foldable =>
+
+        val startDayInt = getAiqDayOfWeekFromString(startDayStr.eval().toString)
+        val Seq(daysSinceEndStmt, daysSinceStartStmt) =
+          Seq(endTimestampLong, startTimestampLong).map { expr =>
+            // Wrapping in `FLOOR` because Casting to Int in Snowflake is
+            // creating data issues. Example:
+            // - Java/Spark: (18140 + 3) / 7 = 2591 (Original value: 2591.8571428571427)
+            // - Snowflake: SELECT ((18140 + 3) / 7) ::int = 2592 (Original value: 2591.857143)
+            convertStatement(
+              Floor(
+                Divide(
+                  Add(AiqDayDiff(Literal(0L), expr, timezoneStr), Literal(startDayInt)),
+                  Literal(7)
+                )
+              ),
+              fields
+            )
+          }
+
+        blockStatement(daysSinceEndStmt + "-" + daysSinceStartStmt)
 
       case _ => null
     })
