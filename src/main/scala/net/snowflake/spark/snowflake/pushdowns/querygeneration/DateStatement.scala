@@ -1,7 +1,30 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, BinaryOperator, DateAdd, DateSub, Divide, Expression, Floor, Literal, Month, Quarter, TruncDate, TruncTimestamp, Year}
+import net.snowflake.spark.snowflake.{
+  ConstantString,
+  SnowflakeSQLStatement
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add,
+  AddMonths,
+  AiqDateToString,
+  AiqDayDiff,
+  AiqDayStart,
+  AiqStringToDate,
+  AiqWeekDiff,
+  Attribute,
+  DateAdd,
+  DateSub,
+  Divide,
+  Expression,
+  Floor,
+  Literal,
+  Month,
+  Quarter,
+  TruncDate,
+  TruncTimestamp,
+  Year
+}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {

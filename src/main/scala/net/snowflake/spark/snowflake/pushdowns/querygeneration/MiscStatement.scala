@@ -8,6 +8,7 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
+import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   Ascending,
@@ -145,6 +146,12 @@ private[querygeneration] object MiscStatement {
               ", "
             )
           )
+
+      case CollectSet(child, _, _) =>
+        functionStatement(
+          "ARRAY_AGG",
+          Seq(ConstantString("DISTINCT") + convertStatement(child, fields))
+        )
 
       case _ => null
     })
