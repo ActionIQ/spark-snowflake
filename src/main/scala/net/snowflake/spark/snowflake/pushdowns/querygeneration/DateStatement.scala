@@ -303,28 +303,32 @@ private[querygeneration] object DateStatement {
      --- spark.sql(
      ---   """select aiq_week_diff(1551880107963, 1553890107963, 'sunday', 'UTC')"""
      --- ).as[Long].collect.head == 3
-     select
-      (
-        (
-          (
-            DATEDIFF (
-              'day',
-              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 0::varchar)) ,
-              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 1551880107963::varchar))
-            ) + 4
-          ) / 7
-        )
-        -
-        (
-          (
-            DATEDIFF (
-              'day' ,
-              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 0::varchar)),
-              TO_TIMESTAMP(CONVERT_TIMEZONE('UTC', 1553890107963::varchar))
-            ) + 4
-          ) / 7
-        )
-      ) ::int
+     select (
+       (
+         FLOOR (
+           (
+             (
+               DATEDIFF (
+                 'day' ,
+                 TO_TIMESTAMP(CONVERT_TIMEZONE ('UTC', 0::varchar)),
+                 TO_TIMESTAMP(CONVERT_TIMEZONE ('UTC', 1551880107963::varchar))
+               ) + 4
+             ) / 7
+           )
+         )
+         -
+         FLOOR (
+           (
+             (
+               DATEDIFF (
+                 'day' ,
+                 TO_TIMESTAMP (CONVERT_TIMEZONE('UTC' , 0::varchar)),
+                 TO_TIMESTAMP (CONVERT_TIMEZONE('UTC' , 1553890107963::varchar))
+               ) + 4
+             ) / 7
+           )
+         )
+       )
      -- 3
      */
       case AiqWeekDiff(startTimestampLong, endTimestampLong, startDayStr, timezoneStr)
