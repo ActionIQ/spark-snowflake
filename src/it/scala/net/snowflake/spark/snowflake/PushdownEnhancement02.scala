@@ -471,7 +471,10 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFStr
     )
-    assert(resultDFStr.collect().head.get(0).asInstanceOf[Seq[String]].length == 3L)
+    assert(
+      resultDFStr.collect().head.get(0).asInstanceOf[Seq[String]].sorted ==
+        Seq("hello this is a test", "hello this is a test1", "hello this is a test2").sorted
+    )
 
     testPushdownSql(
       s"""
@@ -487,7 +490,15 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFInt
     )
-    assert(resultDFStr.collect().head.get(0).asInstanceOf[Seq[Int]].length == 3L)
+    assert(
+      resultDFInt
+        .collect()
+        .head
+        .get(0)
+        .asInstanceOf[Seq[java.math.BigDecimal]]
+        .map(_.intValue)
+        .sorted == Seq(1, 2, 3).sorted
+    )
   }
 
   test("AIQ test pushdown instr") {
