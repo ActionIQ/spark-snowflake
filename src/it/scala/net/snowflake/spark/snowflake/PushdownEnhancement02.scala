@@ -433,6 +433,61 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown collect_set") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(s1 string, s2 bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"""
+         |('hello this is a test1', 1),
+         |('hello this is a test2', 1),
+         |('hello this is a test', 2),
+         |('hello this is a test', 3),
+         |(NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDFStr = tmpDF.selectExpr("collect_set(s1)")
+    val resultDFInt = tmpDF.selectExpr("collect_set(s2)")
+
+    // Cannot test the expected result cause the order of
+    // the items returned in the array is non-deterministic
+    testPushdownSql(
+      s"""
+         |SELECT (
+         |  ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |) AS "SUBQUERY_2_COL_0"
+         |FROM (
+         |  SELECT ( "SUBQUERY_0"."S1" ) AS "SUBQUERY_1_COL_0"
+         |  FROM (
+         |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |) AS "SUBQUERY_1" LIMIT 1
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFStr
+    )
+
+    testPushdownSql(
+      s"""
+         |SELECT (
+         |  ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |) AS "SUBQUERY_2_COL_0"
+         |FROM (
+         |  SELECT ( "SUBQUERY_0"."S2" ) AS "SUBQUERY_1_COL_0"
+         |  FROM (
+         |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |) AS "SUBQUERY_1" LIMIT 1
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFInt
+    )
+  }
+
   test("AIQ test pushdown instr") {
     jdbcUpdate(s"create or replace table $test_table_string " +
       s"(s string)")
