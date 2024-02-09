@@ -1,30 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Add,
-  AddMonths,
-  AiqDateToString,
-  AiqDayDiff,
-  AiqDayStart,
-  AiqStringToDate,
-  AiqWeekDiff,
-  Attribute,
-  DateAdd,
-  DateSub,
-  Divide,
-  Expression,
-  Floor,
-  Literal,
-  Month,
-  Quarter,
-  TruncDate,
-  TruncTimestamp,
-  Year
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, DateAdd, DateSub, Divide, Expression, Floor, Literal, Month, Quarter, Subtract, TruncDate, TruncTimestamp, Year}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -335,24 +312,21 @@ private[querygeneration] object DateStatement {
         if startDayStr.foldable =>
 
         val startDayInt = getAiqDayOfWeekFromString(startDayStr.eval().toString)
-        val Seq(daysSinceEndStmt, daysSinceStartStmt) =
+        val Seq(daysSinceEndExpr, daysSinceStartExpr) =
           Seq(endTimestampLong, startTimestampLong).map { expr =>
             // Wrapping in `FLOOR` because Casting to Int in Snowflake is
             // creating data issues. Example:
             // - Java/Spark: (18140 + 3) / 7 = 2591 (Original value: 2591.8571428571427)
             // - Snowflake: SELECT ((18140 + 3) / 7) ::int = 2592 (Original value: 2591.857143)
-            convertStatement(
-              Floor(
-                Divide(
-                  Add(AiqDayDiff(Literal(0L), expr, timezoneStr), Literal(startDayInt)),
-                  Literal(7)
-                )
-              ),
-              fields
+            Floor(
+              Divide(
+                Add(AiqDayDiff(Literal(0L), expr, timezoneStr), Literal(startDayInt)),
+                Literal(7)
+              )
             )
           }
 
-        blockStatement(daysSinceEndStmt + "-" + daysSinceStartStmt)
+        convertStatement(Subtract(daysSinceEndExpr, daysSinceStartExpr), fields)
 
       case _ => null
     })
