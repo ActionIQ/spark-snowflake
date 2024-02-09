@@ -16,12 +16,12 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3-3-2-aiq60"
+val sparkVersion = "3-3-2-aiq68"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
 // increment this version when making a new release
-val sparkConnectorVersion = "2.11.3-aiq8"
+val sparkConnectorVersion = "2.11.3-aiq9"
 
 lazy val ItTest = config("it") extend Test
 
