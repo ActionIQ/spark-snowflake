@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   TruncDate,
   TruncTimestamp,
+  UnixMillis,
   WeekDay,
   Year
 }
@@ -145,7 +146,7 @@ private[querygeneration] object DateStatement {
       ---   "select aiq_day_start(1460080000000, 'America/New_York', 2)"
       --- ).as[Long].collect.head == 1460174400000L
       SELECT DATE_PART(
-        epoch_millisecond,
+        'EPOCH_MILLISECOND',
         DATE_TRUNC(
           'DAY',
           DATEADD(
@@ -161,28 +162,24 @@ private[querygeneration] object DateStatement {
       -- 1460174400000
        */
       case AiqDayStart(timestampLong, timezoneStr, plusDaysInt) =>
-        val dateExpr = TruncTimestamp(
-          Literal("DAY"),
-          DateAdd(
-            ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong),
-            plusDaysInt,
-          ),
+        val dateExpr = UnixMillis(
+          TruncTimestamp(
+            Literal("DAY"),
+            DateAdd(
+              ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong),
+              plusDaysInt,
+            ),
+          )
         )
 
-        functionStatement(
-          "DATE_PART",
-          Seq(
-            ConstantString("epoch_millisecond").toStatement,
-            convertStatement(dateExpr, fields),
-          ),
-        )
+        convertStatement(dateExpr, fields)
 
       /*
       --- spark.sql(
       ---   "select aiq_string_to_date('2019-09-01 14:50:52', 'yyyy-MM-dd HH:mm:ss', 'America/New_York')"
       --- ).as[Long].collect.head == 1567363852000L
       SELECT DATE_PART(
-        epoch_millisecond,
+        'EPOCH_MILLISECOND',
         CONVERT_TIMEZONE(
           'America/New_York',
           'UTC',
@@ -195,19 +192,15 @@ private[querygeneration] object DateStatement {
       -- 1567363852000
       */
       case AiqStringToDate(dateStr, formatStr, timezoneStr) if formatStr.foldable =>
-        val dateExpr = ConvertTimezone(
-          timezoneStr,
-          Literal("UTC"),
-          ParseToTimestamp(dateStr, Some(formatStr), TimestampType, None),
-        )
-
-        functionStatement(
-          "DATE_PART",
-          Seq(
-            ConstantString("epoch_millisecond").toStatement,
-            convertStatement(dateExpr, fields),
+        val dateExpr = UnixMillis(
+            ConvertTimezone(
+            timezoneStr,
+            Literal("UTC"),
+            ParseToTimestamp(dateStr, Some(formatStr), TimestampType, None),
           )
         )
+
+        convertStatement(dateExpr, fields)
 
       /*
       --- spark.sql(
@@ -361,6 +354,25 @@ private[querygeneration] object DateStatement {
 
         convertStatement(dateExpr, fields)
 
+      case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
+        // time zone of the input timestamp
+        val sourceArg = sourceTz match {
+          // For the 2-argument version the return value is always of type TIMESTAMP_TZ which means
+          // that we don't necessarily need to wrap `ConvertTimezone` around `ParseToTimestamp`
+          case _: CurrentTimeZone => Seq.empty
+          // For the 3-argument version the return value is always of type TIMESTAMP_NTZ which means
+          // that we may have to wrap `ConvertTimezone` around `ParseToTimestamp` or something else
+          case _ => Seq(convertStatement(sourceTz, fields))
+        }
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          sourceArg ++ Seq(
+            convertStatement(targetTz, fields), // time zone to be converted
+            convertStatement(Cast(sourceTs, StringType), fields),
+          ),
+        )
+
       case ParseToTimestamp(left, formatStrOpt, _, timezoneStrOpt)
         if formatStrOpt.forall(_.foldable) =>
 
@@ -383,23 +395,13 @@ private[querygeneration] object DateStatement {
           Seq(convertStatement(left, fields)) ++ formatArg,
         )
 
-      case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
-        // time zone of the input timestamp
-        val sourceArg = sourceTz match {
-          // For the 2-argument version the return value is always of type TIMESTAMP_TZ which means
-          // that we don't necessarily need to wrap `ConvertTimezone` around `ParseToTimestamp`
-          case _: CurrentTimeZone => Seq.empty
-          // For the 3-argument version the return value is always of type TIMESTAMP_NTZ which means
-          // that we may have to wrap `ConvertTimezone` around `ParseToTimestamp` or something else
-          case _ => Seq(convertStatement(sourceTz, fields))
-        }
-
+      case UnixMillis(child) =>
         functionStatement(
-          expr.prettyName.toUpperCase,
-          sourceArg ++ Seq(
-            convertStatement(targetTz, fields), // time zone to be converted
-            convertStatement(Cast(sourceTs, StringType), fields),
-          ),
+          "DATE_PART",
+          Seq(
+            ConstantString("'EPOCH_MILLISECOND'").toStatement,
+            convertStatement(child, fields),
+          )
         )
 
       case _ => null

@@ -269,7 +269,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       s"""
          |SELECT (
          |  DATE_PART (
-         |    epoch_millisecond ,
+         |    'EPOCH_MILLISECOND' ,
          |    DATE_TRUNC (
          |      'DAY' ,
          |      DATEADD (
@@ -335,7 +335,7 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
       s"""
          |SELECT (
          |  DATE_PART (
-         |    epoch_millisecond ,
+         |    'EPOCH_MILLISECOND' ,
          |    CONVERT_TIMEZONE (
          |      'America/New_York' ,
          |      'UTC' ,
