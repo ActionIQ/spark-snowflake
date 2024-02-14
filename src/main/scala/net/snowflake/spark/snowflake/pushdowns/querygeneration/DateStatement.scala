@@ -323,7 +323,7 @@ private[querygeneration] object DateStatement {
       --- spark.sql(
       ---   """select aiq_day_of_the_week(1553890107963, 'UTC')"""
       --- ).as[String].collect.head == friday
-      SELECT DECODE (
+      SELECT DECODE(
         (
           EXTRACT(
             'DAYOFWEEK_ISO' ,
