@@ -15,6 +15,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   CaseWhen,
   Cast,
   Coalesce,
+  Decode,
   Descending,
   Expression,
   If,
@@ -145,6 +146,10 @@ private[querygeneration] object MiscStatement {
               ", "
             )
           )
+
+      case Decode(params, _) =>
+        ConstantString(expr.prettyName.toUpperCase) +
+          blockStatement(convertStatements(fields, params: _*))
 
       case _ => null
     })
