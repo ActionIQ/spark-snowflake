@@ -9,23 +9,32 @@ import org.apache.spark.sql.catalyst.expressions.{
   AddMonths,
   AiqDateToString,
   AiqDayDiff,
+  AiqDayOfTheWeek,
   AiqDayStart,
   AiqStringToDate,
   AiqWeekDiff,
   Attribute,
+  Cast,
+  ConvertTimezone,
+  CurrentTimeZone,
   DateAdd,
   DateSub,
+  Decode,
   Divide,
   Expression,
   Floor,
   Literal,
   Month,
+  ParseToTimestamp,
   Quarter,
   Subtract,
   TruncDate,
   TruncTimestamp,
+  UnixMillis,
+  WeekDay,
   Year
 }
+import org.apache.spark.sql.types.{StringType, TimestampType}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -118,14 +127,28 @@ private[querygeneration] object DateStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
+      // We implement `WeekDay` as `DAYOFWEEK_ISO` (day of the week as an integer value
+      // in the range 1-7, where 1 represents Monday) -1 since the Spark equivalent
+      // returns the day of the week with 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+      case WeekDay(child) =>
+        blockStatement(
+          functionStatement(
+            "EXTRACT",
+            Seq(
+              ConstantString("'DAYOFWEEK_ISO'").toStatement,
+              convertStatement(child, fields),
+            ),
+          ) + ConstantString("- 1")
+        )
+
       /*
       --- spark.sql(
       ---   "select aiq_day_start(1460080000000, 'America/New_York', 2)"
       --- ).as[Long].collect.head == 1460174400000L
-      select DATE_PART(
-        epoch_millisecond,
+      SELECT DATE_PART(
+        'EPOCH_MILLISECOND',
         DATE_TRUNC(
-          'day',
+          'DAY',
           DATEADD(
             day,
             2,
@@ -139,39 +162,24 @@ private[querygeneration] object DateStatement {
       -- 1460174400000
        */
       case AiqDayStart(timestampLong, timezoneStr, plusDaysInt) =>
-        functionStatement(
-          "DATE_PART",
-          Seq(
-            ConstantString("epoch_millisecond").toStatement,
-            functionStatement(
-              "DATE_TRUNC",
-              Seq(
-                ConstantString("'day'").toStatement,
-                functionStatement(
-                  "DATEADD",
-                  Seq(
-                    ConstantString("'day'").toStatement,
-                    convertStatement(plusDaysInt, fields),
-                    functionStatement(
-                      "CONVERT_TIMEZONE",
-                      Seq(
-                        convertStatement(timezoneStr, fields),
-                        convertStatement(timestampLong, fields) + ConstantString("::varchar"),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+        val dateExpr = UnixMillis(
+          TruncTimestamp(
+            Literal("DAY"),
+            DateAdd(
+              ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong),
+              plusDaysInt,
             ),
-          ),
+          )
         )
+
+        convertStatement(dateExpr, fields)
 
       /*
       --- spark.sql(
       ---   "select aiq_string_to_date('2019-09-01 14:50:52', 'yyyy-MM-dd HH:mm:ss', 'America/New_York')"
       --- ).as[Long].collect.head == 1567363852000L
-      select DATE_PART(
-        epoch_millisecond,
+      SELECT DATE_PART(
+        'EPOCH_MILLISECOND',
         CONVERT_TIMEZONE(
           'America/New_York',
           'UTC',
@@ -184,38 +192,24 @@ private[querygeneration] object DateStatement {
       -- 1567363852000
       */
       case AiqStringToDate(dateStr, formatStr, timezoneStr) if formatStr.foldable =>
-        val format = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
-        functionStatement(
-          "DATE_PART",
-          Seq(
-            ConstantString("epoch_millisecond").toStatement,
-            functionStatement(
-              "CONVERT_TIMEZONE",
-              Seq(
-                convertStatement(timezoneStr, fields), // time zone of the input timestamp
-                ConstantString("'UTC'").toStatement, // time zone to be converted
-                functionStatement(
-                  "TO_TIMESTAMP_NTZ", // timestamp with no time zone
-                  Seq(
-                    convertStatement(dateStr, fields),
-                    ConstantString(s"'$format'").toStatement,
-                  )
-                ),
-              ),
-            ),
+        val dateExpr = UnixMillis(
+            ConvertTimezone(
+            timezoneStr,
+            Literal("UTC"),
+            ParseToTimestamp(dateStr, Some(formatStr), TimestampType, None),
           )
         )
+
+        convertStatement(dateExpr, fields)
 
       /*
       --- spark.sql(
       ---   """select aiq_date_to_string(1567363852000, "yyyy-MM-dd HH:mm", 'America/New_York')"""
       --- ).as[String].collect.head == "2019-09-01 14:50"
-      select TO_CHAR(
-        TO_TIMESTAMP(
-          CONVERT_TIMEZONE(
-            'America/New_York',
-            1567363852000::varchar
-          )
+      SELECT TO_CHAR(
+        CONVERT_TIMEZONE(
+          'America/New_York',
+          CAST(1567363852000 AS VARCHAR)
         ),
         'yyyy-mm-dd HH:mm'
       )
@@ -223,23 +217,14 @@ private[querygeneration] object DateStatement {
       */
       case AiqDateToString(timestampLong, formatStr, timezoneStr) if formatStr.foldable =>
         val format = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
+        val dateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong)
+
         functionStatement(
           "TO_CHAR",
           Seq(
-            functionStatement(
-              "TO_TIMESTAMP",
-              Seq(
-                functionStatement(
-                  "CONVERT_TIMEZONE",
-                  Seq(
-                    convertStatement(timezoneStr, fields),
-                    convertStatement(timestampLong, fields) + ConstantString("::varchar"),
-                  ),
-                )
-              )
-            ),
+            convertStatement(dateExpr, fields),
             ConstantString(s"'$format'").toStatement,
-          )
+          ),
         )
 
       /*
@@ -247,84 +232,58 @@ private[querygeneration] object DateStatement {
       --- spark.sql(
       ---   """select aiq_day_diff(1693609200000, 1693616400000, 'UTC')"""
       --- ).as[Long].collect.head == 1
-      select DATEDIFF(
-        'day',
-        TO_TIMESTAMP(
-          CONVERT_TIMEZONE(
-            'UTC',
-            1693609200000::varchar
-          )
+      SELECT DATEDIFF(
+        'DAY',
+        CONVERT_TIMEZONE(
+          'UTC',
+          CAST(1693609200000 AS VARCHAR)
         ),
-        TO_TIMESTAMP(
-          CONVERT_TIMEZONE(
-            'UTC',
-            1693616400000::varchar
-          )
+        CONVERT_TIMEZONE(
+          'UTC',
+          CAST(1693616400000 AS VARCHAR)
         )
       )
       -- 1
       */
       case AiqDayDiff(startTimestampLong, endTimestampLong, timezoneStr) =>
-        val startTimestampStm = functionStatement(
-          "TO_TIMESTAMP",
-          Seq(
-            functionStatement(
-              "CONVERT_TIMEZONE",
-              Seq(
-                convertStatement(timezoneStr, fields),
-                convertStatement(startTimestampLong, fields) + ConstantString("::varchar"),
-              ),
-            )
-          )
-        )
-        val endTimestampStm = functionStatement(
-          "TO_TIMESTAMP",
-          Seq(
-            functionStatement(
-              "CONVERT_TIMEZONE",
-              Seq(
-                convertStatement(timezoneStr, fields),
-                convertStatement(endTimestampLong, fields) + ConstantString("::varchar"),
-              ),
-            )
-          )
-        )
+        val startDateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, startTimestampLong)
+        val endDateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, endTimestampLong)
 
         functionStatement(
           "DATEDIFF",
           Seq(
-            ConstantString("'day'").toStatement,
-            startTimestampStm,
-            endTimestampStm,
+            ConstantString("'DAY'").toStatement,
+            convertStatement(startDateExpr, fields),
+            convertStatement(endDateExpr, fields),
           )
         )
 
       /*
-     --- 2023-09-01 to 2023-09-02
+     --- 2019-03-06 to 2019-03-29
      --- spark.sql(
      ---   """select aiq_week_diff(1551880107963, 1553890107963, 'sunday', 'UTC')"""
      --- ).as[Long].collect.head == 3
-     select (
+     SELECT (
        (
-         FLOOR (
+         FLOOR(
            (
              (
-               DATEDIFF (
-                 'day' ,
-                 TO_TIMESTAMP(CONVERT_TIMEZONE ('UTC', 0::varchar)),
-                 TO_TIMESTAMP(CONVERT_TIMEZONE ('UTC', 1551880107963::varchar))
+               DATEDIFF(
+                 'DAY' ,
+                 CONVERT_TIMEZONE('UTC', CAST(0 AS VARCHAR)),
+                 CONVERT_TIMEZONE('UTC', CAST(1551880107963 AS VARCHAR))
                ) + 4
              ) / 7
            )
          )
          -
-         FLOOR (
+         FLOOR(
            (
              (
-               DATEDIFF (
-                 'day' ,
-                 TO_TIMESTAMP (CONVERT_TIMEZONE('UTC' , 0::varchar)),
-                 TO_TIMESTAMP (CONVERT_TIMEZONE('UTC' , 1553890107963::varchar))
+               DATEDIFF(
+                 'DAY' ,
+                 CONVERT_TIMEZONE('UTC', CAST(0 AS VARCHAR)),
+                 CONVERT_TIMEZONE('UTC', CAST(1553890107963 AS VARCHAR))
                ) + 4
              ) / 7
            )
@@ -345,12 +304,105 @@ private[querygeneration] object DateStatement {
             Floor(
               Divide(
                 Add(AiqDayDiff(Literal(0L), expr, timezoneStr), Literal(startDayInt)),
-                Literal(7)
+                Literal(7),
               )
             )
           }
 
         convertStatement(Subtract(daysSinceEndExpr, daysSinceStartExpr), fields)
+
+      /*
+      --- 2019-03-29
+      --- spark.sql(
+      ---   """select aiq_day_of_the_week(1553890107963, 'UTC')"""
+      --- ).as[String].collect.head == friday
+      SELECT DECODE(
+        (
+          EXTRACT(
+            'DAYOFWEEK_ISO' ,
+            CONVERT_TIMEZONE('UTC', CAST(1553890107963 AS VARCHAR))
+          ) - 1
+        ) ,
+        0 , 'monday' ,
+        1 , 'tuesday' ,
+        2 , 'wednesday' ,
+        3 , 'thursday' ,
+        4 , 'friday' ,
+        5 , 'saturday' ,
+        6 , 'sunday' ,
+        NULL
+      )
+      -- friday
+      */
+      // scalastyle:off line.size.limit
+      // https://docs.snowflake.com/sql-reference/date-time-examples#retrieving-dates-and-days-of-the-week
+      // scalastyle:on line.size.limit
+      case AiqDayOfTheWeek(epochTimestamp, timezoneStr) =>
+        val dateExpr = Decode(
+          Seq(
+            WeekDay(ConvertTimezone(CurrentTimeZone(), timezoneStr, epochTimestamp)),
+            Literal(0), Literal("monday"),
+            Literal(1), Literal("tuesday"),
+            Literal(2), Literal("wednesday"),
+            Literal(3), Literal("thursday"),
+            Literal(4), Literal("friday"),
+            Literal(5), Literal("saturday"),
+            Literal(6), Literal("sunday"),
+          ),
+          Literal(null),
+        )
+
+        convertStatement(dateExpr, fields)
+
+      case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
+        // time zone of the input timestamp
+        val sourceArg = sourceTz match {
+          // For the 2-argument version the return value is always of type TIMESTAMP_TZ which means
+          // that we don't necessarily need to wrap `ConvertTimezone` around `ParseToTimestamp`
+          case _: CurrentTimeZone => Seq.empty
+          // For the 3-argument version the return value is always of type TIMESTAMP_NTZ which means
+          // that we may have to wrap `ConvertTimezone` around `ParseToTimestamp` or something else
+          case _ => Seq(convertStatement(sourceTz, fields))
+        }
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          sourceArg ++ Seq(
+            convertStatement(targetTz, fields), // time zone to be converted
+            convertStatement(Cast(sourceTs, StringType), fields),
+          ),
+        )
+
+      case ParseToTimestamp(left, formatStrOpt, _, timezoneStrOpt)
+        if formatStrOpt.forall(_.foldable) =>
+
+        // This is a workaround for now since TimestampNTZType is private case class in Spark 3.3
+        // Spark 3.4 makes it a public class at which point we can change this logic to use
+        // TimestampType and TimestampNTZType to decide
+        val functionName = timezoneStrOpt.map ( _ =>
+          "TO_TIMESTAMP"
+        ).getOrElse(
+          "TO_TIMESTAMP_NTZ" // timestamp with no time zone
+        )
+
+        val formatArg = formatStrOpt.map { formatStr =>
+          val fmt = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
+          Seq(ConstantString(s"'$fmt'").toStatement)
+        }.getOrElse(Seq.empty)
+
+        functionStatement(
+          functionName,
+          Seq(convertStatement(left, fields)) ++ formatArg,
+        )
+
+      case UnixMillis(child) =>
+        functionStatement(
+          "DATE_PART",
+          Seq(
+            ConstantString("'EPOCH_MILLISECOND'").toStatement,
+            convertStatement(child, fields),
+          )
+        )
 
       case _ => null
     })
