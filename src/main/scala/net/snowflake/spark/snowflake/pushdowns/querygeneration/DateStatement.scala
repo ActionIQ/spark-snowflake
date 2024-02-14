@@ -367,7 +367,7 @@ private[querygeneration] object DateStatement {
 
         // This is a workaround for now since TimestampNTZType is private case class in Spark 3.3
         // Spark 3.4 makes it a public class at which point we can change this logic to use
-        // TimestampType and TimestampNTZType
+        // TimestampType and TimestampNTZType to decide
         val functionName = timezoneStrOpt.map ( _ =>
           "TO_TIMESTAMP"
         ).getOrElse(
