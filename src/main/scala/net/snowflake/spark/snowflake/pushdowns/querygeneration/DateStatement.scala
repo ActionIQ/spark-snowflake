@@ -165,7 +165,7 @@ private[querygeneration] object DateStatement {
           DateAdd(
             ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong),
             plusDaysInt,
-          )
+          ),
         )
 
         functionStatement(
