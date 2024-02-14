@@ -325,12 +325,9 @@ private[querygeneration] object DateStatement {
       --- ).as[String].collect.head == friday
       SELECT DECODE (
         (
-          EXTRACT (
+          EXTRACT(
             'DAYOFWEEK_ISO' ,
-            CONVERT_TIMEZONE (
-              'UTC' ,
-              CAST ( 1553890107963 AS VARCHAR )
-            )
+            CONVERT_TIMEZONE('UTC', CAST(1553890107963 AS VARCHAR))
           ) - 1
         ) ,
         0 , 'monday' ,
