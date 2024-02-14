@@ -19,7 +19,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   CurrentTimeZone,
   DateAdd,
   DateSub,
-  DayOfWeek,
   Decode,
   Divide,
   Expression,
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Subtract,
   TruncDate,
   TruncTimestamp,
+  WeekDay,
   Year
 }
 import org.apache.spark.sql.types.{StringType, TimestampType}
@@ -126,17 +126,18 @@ private[querygeneration] object DateStatement {
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, expr.children: _*))
 
-      // We implement `DayOfWeek` as `DAYOFWEEK_ISO` since the Spark equivalent returns the day
-      // of the week with 1 = Sunday, 2 = Monday, ..., 7 = Saturday.
-      // `WeekDay` can/will be the equivalent `DAYOFWEEK` since the Spark equivalent returns the
-      // day of the week with 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
-      case DayOfWeek(child) =>
-        functionStatement(
-          "EXTRACT",
-          Seq(
-            ConstantString("'DAYOFWEEK_ISO'").toStatement,
-            convertStatement(child, fields),
-          ),
+      // We implement `WeekDay` as `DAYOFWEEK_ISO` (day of the week as an integer value
+      // in the range 1-7, where 1 represents Monday) -1 since the Spark equivalent
+      // returns the day of the week with 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
+      case WeekDay(child) =>
+        blockStatement(
+          functionStatement(
+            "EXTRACT",
+            Seq(
+              ConstantString("'DAYOFWEEK_ISO'").toStatement,
+              convertStatement(child, fields),
+            ),
+          ) + ConstantString("- 1")
         )
 
       /*
@@ -330,13 +331,13 @@ private[querygeneration] object DateStatement {
             CAST ( 1553890107963 AS VARCHAR )
           )
         ) ,
-        1 , 'monday' ,
-        2 , 'tuesday' ,
-        3 , 'wednesday' ,
-        4 , 'thursday' ,
-        5 , 'friday' ,
-        6 , 'saturday' ,
-        7 , 'sunday' ,
+        0 , 'monday' ,
+        1 , 'tuesday' ,
+        2 , 'wednesday' ,
+        3 , 'thursday' ,
+        4 , 'friday' ,
+        5 , 'saturday' ,
+        6 , 'sunday' ,
         NULL
       )
       -- friday
@@ -347,14 +348,14 @@ private[querygeneration] object DateStatement {
       case AiqDayOfTheWeek(epochTimestamp, timezoneStr) =>
         val dateExpr = Decode(
           Seq(
-            DayOfWeek(ConvertTimezone(CurrentTimeZone(), timezoneStr, epochTimestamp)),
-            Literal(1), Literal("monday"),
-            Literal(2), Literal("tuesday"),
-            Literal(3), Literal("wednesday"),
-            Literal(4), Literal("thursday"),
-            Literal(5), Literal("friday"),
-            Literal(6), Literal("saturday"),
-            Literal(7), Literal("sunday"),
+            WeekDay(ConvertTimezone(CurrentTimeZone(), timezoneStr, epochTimestamp)),
+            Literal(0), Literal("monday"),
+            Literal(1), Literal("tuesday"),
+            Literal(2), Literal("wednesday"),
+            Literal(3), Literal("thursday"),
+            Literal(4), Literal("friday"),
+            Literal(5), Literal("saturday"),
+            Literal(6), Literal("sunday"),
           ),
           Literal(null),
         )
