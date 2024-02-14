@@ -382,29 +382,23 @@ private[querygeneration] object DateStatement {
         )
 
       case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
-        sourceTz match {
+        // time zone of the input timestamp
+        val sourceArg = sourceTz match {
           // For the 2-argument version the return value is always of type TIMESTAMP_TZ which means
           // that we don't necessarily need to wrap `ConvertTimezone` around `ParseToTimestamp`
-          case _: CurrentTimeZone =>
-            functionStatement(
-              expr.prettyName.toUpperCase,
-              Seq(
-                convertStatement(targetTz, fields),
-                convertStatement(Cast(sourceTs, StringType), fields),
-              ),
-            )
+          case _: CurrentTimeZone => Seq.empty
           // For the 3-argument version the return value is always of type TIMESTAMP_NTZ which means
           // that we may have to wrap `ConvertTimezone` around `ParseToTimestamp` or something else
-          case _ =>
-            functionStatement(
-              expr.prettyName.toUpperCase,
-              Seq(
-                convertStatement(sourceTz, fields), // time zone of the input timestamp
-                convertStatement(targetTz, fields), // time zone to be converted
-                convertStatement(Cast(sourceTs, StringType), fields),
-              ),
-            )
+          case _ => Seq(convertStatement(sourceTz, fields))
         }
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          sourceArg ++ Seq(
+            convertStatement(targetTz, fields), // time zone to be converted
+            convertStatement(Cast(sourceTs, StringType), fields),
+          ),
+        )
 
       case _ => null
     })
