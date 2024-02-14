@@ -317,9 +317,6 @@ private[querygeneration] object DateStatement {
 
         convertStatement(Subtract(daysSinceEndExpr, daysSinceStartExpr), fields)
 
-      // scalastyle:off line.size.limit
-      // https://docs.snowflake.com/sql-reference/date-time-examples#retrieving-dates-and-days-of-the-week
-      // scalastyle:on line.size.limit
       /*
       --- 2019-03-29
       --- spark.sql(
@@ -339,10 +336,14 @@ private[querygeneration] object DateStatement {
         4 , 'thursday' ,
         5 , 'friday' ,
         6 , 'saturday' ,
-        7 , 'sunday'
+        7 , 'sunday' ,
+        NULL
       )
       -- friday
       */
+      // scalastyle:off line.size.limit
+      // https://docs.snowflake.com/sql-reference/date-time-examples#retrieving-dates-and-days-of-the-week
+      // scalastyle:on line.size.limit
       case AiqDayOfTheWeek(epochTimestamp, timezoneStr) =>
         val dateExpr = Decode(
           Seq(
@@ -360,7 +361,9 @@ private[querygeneration] object DateStatement {
 
         convertStatement(dateExpr, fields)
 
-      case ParseToTimestamp(left, formatStrOpt, _, timezoneStrOpt) =>
+      case ParseToTimestamp(left, formatStrOpt, _, timezoneStrOpt)
+        if formatStrOpt.forall(_.foldable) =>
+
         // This is a workaround for now since TimestampNTZType is private case class in Spark 3.3
         val functionName = timezoneStrOpt.map ( _ =>
           "TO_TIMESTAMP"
@@ -369,9 +372,7 @@ private[querygeneration] object DateStatement {
         )
 
         val formatArg = formatStrOpt.map { formatStr =>
-          require(formatStr.foldable, "format should be a foldable Expression")
           val fmt = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
-
           Seq(ConstantString(s"'$fmt'").toStatement)
         }.getOrElse(Seq.empty)
 
