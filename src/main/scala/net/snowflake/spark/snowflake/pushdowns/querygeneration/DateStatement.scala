@@ -324,12 +324,14 @@ private[querygeneration] object DateStatement {
       ---   """select aiq_day_of_the_week(1553890107963, 'UTC')"""
       --- ).as[String].collect.head == friday
       SELECT DECODE (
-        EXTRACT (
-          'DAYOFWEEK_ISO' ,
-          CONVERT_TIMEZONE (
-            'UTC' ,
-            CAST ( 1553890107963 AS VARCHAR )
-          )
+        (
+          EXTRACT (
+            'DAYOFWEEK_ISO' ,
+            CONVERT_TIMEZONE (
+              'UTC' ,
+              CAST ( 1553890107963 AS VARCHAR )
+            )
+          ) - 1
         ) ,
         0 , 'monday' ,
         1 , 'tuesday' ,
