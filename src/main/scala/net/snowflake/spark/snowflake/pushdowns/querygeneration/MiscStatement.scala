@@ -147,9 +147,9 @@ private[querygeneration] object MiscStatement {
             )
           )
 
-      case Decode(params, _) =>
+      case Decode(params, replacement) =>
         ConstantString(expr.prettyName.toUpperCase) +
-          blockStatement(convertStatements(fields, params: _*))
+          blockStatement(convertStatements(fields, params ++ Seq(replacement) : _*))
 
       case _ => null
     })

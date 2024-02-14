@@ -656,7 +656,8 @@ class PushdownEnhancement02 extends IntegrationSuiteBase {
          |    4 , 'thursday' ,
          |    5 , 'friday' ,
          |    6 , 'saturday' ,
-         |    7 , 'sunday'
+         |    7 , 'sunday' ,
+         |    NULL
          |  )
          |) AS "SUBQUERY_1_COL_0"
          |FROM (
