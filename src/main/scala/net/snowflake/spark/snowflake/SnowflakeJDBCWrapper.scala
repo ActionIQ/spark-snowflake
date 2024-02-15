@@ -380,7 +380,8 @@ private[snowflake] object DefaultJDBCWrapper extends JDBCWrapper {
                     bindVariableEnabled: Boolean = true): Unit =
       (ConstantString("create") +
         (if (overwrite) "or replace" else "") +
-        (if (temporary) "temporary" else "") + "table" +
+        (if (temporary) "temporary" else "") +
+        (if (!temporary & params.writeToTransientTableCheck) "transient" else "") + "table" +
         (if (!overwrite) "if not exists" else "") + Identifier(name) +
         s"(${schemaString(schema, params)})")
         .execute(bindVariableEnabled)(connection)

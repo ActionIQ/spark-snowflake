@@ -103,6 +103,44 @@ class JDBCSuite extends IntegrationSuiteBase {
 
   }
 
+  test("AIQ create and drop transient table") {
+
+    val name = s"spark_test_table_$randomSuffix"
+    val schema =
+      new StructType(Array(StructField("num", IntegerType, nullable = false)))
+
+    val transientParams = params.copy(parameters = params.parameters.map {
+      case ("write_to_transient_table", "false") => "write_to_transient_table" -> "true"
+      case kv => kv
+    })
+
+    def validate(expectedKind: String): Unit = {
+      assert(conn.tableExists(name))
+
+      testTableKind(name, expectedKind)
+
+      assert(conn.dropTable(name))
+
+      assert(!conn.tableExists(name))
+    }
+
+    conn.createTable(name, schema, transientParams, overwrite = true, temporary = false)
+
+    validate("transient")
+
+    conn.createTable(name, schema, transientParams, overwrite = false, temporary = false)
+
+    validate("transient")
+
+    conn.createTable(name, schema, transientParams, overwrite = true, temporary = true)
+
+    validate("temporary")
+
+    conn.createTable(name, schema, transientParams, overwrite = false, temporary = true)
+
+    validate("temporary")
+  }
+
   test("test schema") {
     val name = s"spark_test_table_$randomSuffix"
     val schema =

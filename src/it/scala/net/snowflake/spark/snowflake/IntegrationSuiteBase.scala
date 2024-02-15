@@ -22,6 +22,7 @@ import net.snowflake.spark.snowflake.pushdowns.SnowflakeStrategy
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
 
+import scala.collection.mutable
 import scala.util.matching.Regex
 
 /**
@@ -179,7 +180,25 @@ trait IntegrationSuiteBase
     }
   }
 
+  // Utility function to test the `kind` of the provided table
+  def testTableKind(testTableName: String, expectedKind: String): Unit = {
+    val statement = conn.createStatement()
 
+    statement.execute("show tables")
+
+    val resultSet = statement.getResultSet
+    val tablesInfo = mutable.Map.empty[String, Option[String]]
+    while (resultSet.next()) {
+      tablesInfo += resultSet.getString(2) -> Option(resultSet.getString(5))
+    }
+
+    assert(
+      tablesInfo
+        .getOrElse(testTableName, None)
+        .map(_.toLowerCase)
+        .contains(expectedKind.toLowerCase)
+    )
+  }
 
   // Utility function to drop some garbage test tables.
   // Be careful to use this function which drops a bunch of tables.
