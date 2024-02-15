@@ -189,13 +189,13 @@ trait IntegrationSuiteBase
     val resultSet = statement.getResultSet
     val tablesInfo = mutable.Map.empty[String, Option[String]]
     while (resultSet.next()) {
-      tablesInfo += resultSet.getString(2) -> Option(resultSet.getString(5))
+      tablesInfo +=
+        resultSet.getString(2).toLowerCase -> Option(resultSet.getString(5).toLowerCase)
     }
 
     assert(
       tablesInfo
-        .getOrElse(testTableName, None)
-        .map(_.toLowerCase)
+        .getOrElse(testTableName.toLowerCase, None)
         .contains(result.toLowerCase)
     )
   }
