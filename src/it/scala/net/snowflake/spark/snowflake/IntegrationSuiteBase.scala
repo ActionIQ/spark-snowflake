@@ -181,7 +181,7 @@ trait IntegrationSuiteBase
   }
 
   // Utility function to test the `kind` of the provided table
-  def testTableKind(testTableName: String, expectedKind: String): Unit = {
+  def testTableKind(testTableName: String, result: String): Unit = {
     val statement = conn.createStatement()
 
     statement.execute("show tables")
@@ -196,7 +196,7 @@ trait IntegrationSuiteBase
       tablesInfo
         .getOrElse(testTableName, None)
         .map(_.toLowerCase)
-        .contains(expectedKind.toLowerCase)
+        .contains(result.toLowerCase)
     )
   }
 
