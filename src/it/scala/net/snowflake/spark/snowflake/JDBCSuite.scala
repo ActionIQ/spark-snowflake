@@ -110,10 +110,7 @@ class JDBCSuite extends IntegrationSuiteBase {
       new StructType(Array(StructField("num", IntegerType, nullable = false)))
 
     val transientParams = params.copy(
-      parameters = params.parameters.map {
-        case ("write_to_transient_table", "false") => "write_to_transient_table" -> "true"
-        case kv => kv
-      }
+      parameters = params.parameters.updated("write_to_transient_table", "true")
     )
 
     def validate(expectedKind: String): Unit = {
