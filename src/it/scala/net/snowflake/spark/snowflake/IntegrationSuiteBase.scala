@@ -180,7 +180,7 @@ trait IntegrationSuiteBase
     }
   }
 
-  // Utility function to test the `kind` of the provided table
+  // Utility function to test the `kind` (permanent | temporary | transient) of the provided table
   def testTableKind(testTableName: String, result: String): Unit = {
     val statement = conn.createStatement()
 
