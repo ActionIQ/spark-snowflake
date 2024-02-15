@@ -237,6 +237,11 @@ object Parameters {
     "force_skip_pre_post_action_check_for_session_sharing"
   )
 
+  // adding support for dataframe write to transient table
+  val PARAM_WRITE_TO_TRANSIENT_TABLE: String = knownParam(
+    "write_to_transient_table"
+  )
+
   val DEFAULT_S3_MAX_FILE_SIZE: String = (10 * 1000 * 1000).toString
   val MIN_S3_MAX_FILE_SIZE = 1000000
 
@@ -1033,6 +1038,10 @@ object Parameters {
             s"Only Support azure or s3 storage: $str"
           )
       }
+    }
+
+    def writeToTransientTableCheck: Boolean = {
+      isTrue(parameters.getOrElse(PARAM_WRITE_TO_TRANSIENT_TABLE, "false"))
     }
   }
 }
