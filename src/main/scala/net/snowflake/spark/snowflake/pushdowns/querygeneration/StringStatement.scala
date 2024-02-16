@@ -130,7 +130,7 @@ private[querygeneration] object StringStatement {
         }
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
-      case _: Uuid => functionStatement("UUID_STRING", Seq())
+      case _: Uuid => functionStatement("UUID_STRING", Seq.empty)
 
       // https://docs.snowflake.com/en/sql-reference/functions/trim
       // https://docs.snowflake.com/en/sql-reference/functions/to_decimal

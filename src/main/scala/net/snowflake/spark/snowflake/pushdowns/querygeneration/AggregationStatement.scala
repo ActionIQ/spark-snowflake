@@ -43,6 +43,9 @@ private[querygeneration] object AggregationStatement {
               ConstantString("HLL") +
                 blockStatement(convertStatements(fields, agg_fun.children: _*))
             case _: CollectSet =>
+              // scalastyle:off line.size.limit
+              // https://community.snowflake.com/s/question/0D50Z00009bTcpkSAC/equivalent-of-collectset-in-hive
+              // scalastyle:on line.size.limit
               functionStatement(
                 "ARRAY_AGG",
                 Seq(ConstantString("DISTINCT") + convertStatements(fields, agg_fun.children: _*))

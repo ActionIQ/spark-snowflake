@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   WeekDay,
   Year
 }
-import org.apache.spark.sql.types.{StringType, TimestampType}
+import org.apache.spark.sql.types.{NullType, StringType, TimestampType}
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object DateStatement {
@@ -349,7 +349,7 @@ private[querygeneration] object DateStatement {
             Literal(5), Literal("saturday"),
             Literal(6), Literal("sunday"),
           ),
-          Literal(null),
+          Literal.default(NullType),
         )
 
         convertStatement(dateExpr, fields)

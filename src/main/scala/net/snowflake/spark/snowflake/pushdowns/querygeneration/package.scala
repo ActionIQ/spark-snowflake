@@ -104,6 +104,7 @@ package object querygeneration {
     fields: Seq[Attribute]
   ): SnowflakeSQLStatement = {
     (expression, fields) match {
+      case ArrayStatement(stmt) => stmt
       case AggregationStatement(stmt) => stmt
       case BasicStatement(stmt) => stmt
       case BooleanStatement(stmt) => stmt
