@@ -16,7 +16,7 @@
 
 import scala.util.Properties
 
-val sparkVersion = "3-3-2-aiq71"
+val sparkVersion = "3-3-2-aiq73"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
