@@ -42,13 +42,20 @@ private[querygeneration] object AggregationStatement {
               // like mutableAggBufferOffset and inputAggBufferOffset
               ConstantString("HLL") +
                 blockStatement(convertStatements(fields, agg_fun.children: _*))
+            // https://docs.snowflake.com/en/sql-reference/functions/array_agg
+            case _: CollectList =>
+              functionStatement(
+                "ARRAY_AGG",
+                Seq(convertStatements(fields, agg_fun.children: _*)),
+              )
             case _: CollectSet =>
               // scalastyle:off line.size.limit
+              // https://docs.snowflake.com/en/sql-reference/functions/array_agg
               // https://community.snowflake.com/s/question/0D50Z00009bTcpkSAC/equivalent-of-collectset-in-hive
               // scalastyle:on line.size.limit
               functionStatement(
                 "ARRAY_AGG",
-                Seq(ConstantString("DISTINCT") + convertStatements(fields, agg_fun.children: _*))
+                Seq(ConstantString("DISTINCT") + convertStatements(fields, agg_fun.children: _*)),
               )
             case _ =>
               // This exception is not a real issue. It will be caught in
