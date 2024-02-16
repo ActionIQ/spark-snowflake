@@ -3,13 +3,13 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 import net.snowflake.spark.snowflake._
 
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, CreateArray, Expression, Flatten, Literal, Size, Slice, SortArray}
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, CreateArray, Expression, Flatten, GetJsonObject, Literal, Size, Slice, SortArray, StructsToJson}
 import org.apache.spark.sql.types.{ArrayType, MapType}
 
 /**
  * Extractor for basic (attributes and literals) expressions.
  */
-private[querygeneration] object ArrayStatement {
+private[querygeneration] object StructStatement {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
    * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -28,6 +28,9 @@ private[querygeneration] object ArrayStatement {
     val fields = expAttr._2
 
     Option(expr match {
+
+      // Array
+
       // https://docs.snowflake.com/en/sql-reference/functions/array_contains
       case ArrayContains(left, right) =>
         functionStatement(
@@ -150,6 +153,22 @@ private[querygeneration] object ArrayStatement {
         functionStatement(
           "ARRAY_SORT",
           Seq(base, ascendingOrder, nullsFirst).map(convertStatement(_, fields)),
+        )
+
+      // JSON
+
+      // https://docs.snowflake.com/en/sql-reference/functions/parse_json
+      case GetJsonObject(json, _) =>
+        functionStatement(
+          "PARSE_JSON",
+          Seq(json).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/to_json
+      case StructsToJson(_, child, _) =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(child).map(convertStatement(_, fields)),
         )
 
       case _ => null
