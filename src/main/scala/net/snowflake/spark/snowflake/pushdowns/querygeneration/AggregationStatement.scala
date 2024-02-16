@@ -42,8 +42,8 @@ private[querygeneration] object AggregationStatement {
               // like mutableAggBufferOffset and inputAggBufferOffset
               ConstantString("HLL") +
                 blockStatement(convertStatements(fields, agg_fun.children: _*))
-            // https://docs.snowflake.com/en/sql-reference/functions/array_agg
             case _: CollectList =>
+              // https://docs.snowflake.com/en/sql-reference/functions/array_agg
               functionStatement(
                 "ARRAY_AGG",
                 Seq(convertStatements(fields, agg_fun.children: _*)),
