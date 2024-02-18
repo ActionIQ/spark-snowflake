@@ -36,13 +36,6 @@ private[querygeneration] object CryptographicStatement {
     val fields = expAttr._2
 
     Option(expr match {
-      // https://docs.snowflake.com/en/sql-reference/functions/hash
-      case XxHash64(children, _) =>
-        functionStatement(
-          "HASH",
-          Seq(convertStatements(fields, children: _*)),
-        )
-
       // https://docs.snowflake.com/en/sql-reference/functions/md5
       case Md5(child) =>
         val childExpr = child match {
@@ -80,6 +73,13 @@ private[querygeneration] object CryptographicStatement {
         functionStatement(
           expr.prettyName.toUpperCase,
           Seq(leftExpr, right).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/hash
+      case XxHash64(children, _) =>
+        functionStatement(
+          "HASH",
+          Seq(convertStatements(fields, children: _*)),
         )
 
       case _ => null

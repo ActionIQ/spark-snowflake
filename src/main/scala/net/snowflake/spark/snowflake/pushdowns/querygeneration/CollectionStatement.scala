@@ -133,7 +133,8 @@ private[querygeneration] object CollectionStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_cat
-      case Concat(children) =>
+      case Concat(children)
+        if children.map(_.dataType.isInstanceOf[ArrayType]).forall(identity) =>
         functionStatement(
           "ARRAY_CAT",
           Seq(convertStatements(fields, children: _*)),
