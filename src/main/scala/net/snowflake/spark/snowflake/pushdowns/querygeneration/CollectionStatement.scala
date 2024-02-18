@@ -8,6 +8,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ArrayDistinct,
   ArrayExcept,
   ArrayIntersect,
+  ArrayJoin,
   ArrayMax,
   ArrayMin,
   ArrayPosition,
@@ -15,6 +16,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ArrayUnion,
   ArraysOverlap,
   Attribute,
+  Concat,
   CreateArray,
   CreateNamedStruct,
   Expression,
@@ -26,12 +28,12 @@ import org.apache.spark.sql.catalyst.expressions.{
   SortArray,
   StructsToJson
 }
-import org.apache.spark.sql.types.{ArrayType, MapType}
+import org.apache.spark.sql.types.ArrayType
 
 /**
- * Extractor for basic (attributes and literals) expressions.
+ * Extractor for collection-style expressions.
  */
-private[querygeneration] object StructStatement {
+private[querygeneration] object CollectionStatement {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
    * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -82,6 +84,13 @@ private[querygeneration] object StructStatement {
           Seq(left, right).map(convertStatement(_, fields)),
         )
 
+      // https://docs.snowflake.com/en/sql-reference/functions/array_to_string
+      case ArrayJoin(array, delimiter, _) =>
+        functionStatement(
+          "ARRAY_TO_STRING",
+          Seq(array, delimiter).map(convertStatement(_, fields)),
+        )
+
       // https://docs.snowflake.com/en/sql-reference/functions/array_max
       case ArrayMax(child) =>
         functionStatement(
@@ -111,26 +120,23 @@ private[querygeneration] object StructStatement {
           Seq(left, right).map(convertStatement(_, fields)),
         )
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_cat
       case ArrayUnion(left, right) =>
         // we need distinct to map 1-1 with the Spark implementation that returns an
         // array of the elements in the union of array1 and array2 without duplicates
-        // Note: no good way to do this with Spark Expressions, so wrapping with functionStatement
-        functionStatement(
-          "ARRAY_DISTINCT",
-          Seq(
-            functionStatement(
-              "ARRAY_CAT",
-              Seq(left, right).map(convertStatement(_, fields)),
-            ),
-          ),
-        )
+        convertStatement(ArrayDistinct(Concat(Seq(left, right))), fields)
 
       // https://docs.snowflake.com/en/sql-reference/functions/arrays_overlap
       case ArraysOverlap(left, right) =>
         functionStatement(
           expr.prettyName.toUpperCase,
           Seq(left, right).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/array_cat
+      case Concat(children) =>
+        functionStatement(
+          "ARRAY_CAT",
+          Seq(convertStatements(fields, children: _*)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_construct
@@ -148,18 +154,15 @@ private[querygeneration] object StructStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_size
-      // https://docs.snowflake.com/en/sql-reference/functions/map_size
       case Size(child, _) =>
-        val functionName = child.dataType match {
-          case _: ArrayType => "ARRAY_SIZE"
-          case _: MapType => "MAP_SIZE"
+        child.dataType match {
+          case _: ArrayType =>
+            functionStatement(
+              "ARRAY_SIZE",
+              Seq(convertStatement(child, fields)),
+            )
           case _ => null
         }
-
-        functionStatement(
-          functionName,
-          Seq(convertStatement(child, fields)),
-        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_slice
       case Slice(x, start, length) =>

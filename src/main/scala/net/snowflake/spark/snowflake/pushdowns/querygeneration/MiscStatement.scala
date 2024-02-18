@@ -147,6 +147,7 @@ private[querygeneration] object MiscStatement {
             )
           )
 
+      // https://docs.snowflake.com/en/sql-reference/functions/decode
       case Decode(params, replacement) =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, params ++ Seq(replacement): _*))

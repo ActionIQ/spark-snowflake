@@ -33,7 +33,9 @@ import org.apache.spark.sql.catalyst.expressions.{
   UnaryMinus
 }
 
-/** Extractor for boolean expressions (return true or false). */
+/**
+ * Extractor for numeric-style expressions.
+ */
 private[querygeneration] object NumericStatement {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches

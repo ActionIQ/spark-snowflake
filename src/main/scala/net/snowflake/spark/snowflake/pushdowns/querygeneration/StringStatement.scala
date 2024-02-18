@@ -16,15 +16,22 @@ import org.apache.spark.sql.catalyst.expressions.{
   Like,
   Literal,
   Lower,
+  RLike,
+  RegExpExtract,
+  RegExpExtractAll,
+  RegExpReplace,
   Reverse,
   StringInstr,
   StringLPad,
   StringRPad,
+  StringReplace,
   StringTranslate,
   StringTrim,
+  StringTrimBoth,
   StringTrimLeft,
   StringTrimRight,
   Substring,
+  ToNumber,
   Upper,
   Uuid
 }
@@ -115,6 +122,35 @@ private[querygeneration] object StringStatement {
           fields
         ) + escapeClause
 
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr
+      case RegExpExtract(subject, regexp, idx) =>
+        val Seq(position, occurrence) = Seq.fill(2)(Literal(1))
+        val regex_parameters = Literal("c")
+
+        functionStatement(
+          "REGEXP_SUBSTR",
+          Seq(subject, regexp, position, occurrence, regex_parameters, idx)
+            .map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
+      case RegExpExtractAll(subject, regexp, idx) =>
+        val Seq(position, occurrence) = Seq.fill(2)(Literal(1))
+        val regex_parameters = Literal("c")
+
+        functionStatement(
+          "REGEXP_SUBSTR_ALL",
+          Seq(subject, regexp, position, occurrence, regex_parameters, idx)
+            .map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_replace
+      case RegExpReplace(subject, regexp, rep, pos) =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(subject, regexp, rep, pos).map(convertStatement(_, fields)),
+        )
+
       // https://docs.snowflake.com/en/sql-reference/functions/reverse
       // Reverse in Snowflake only supports StringType and DateType.
       // Spark only supports StringType and ArrayType, thus we only
@@ -128,6 +164,34 @@ private[querygeneration] object StringStatement {
             )
           case _ => null
         }
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_like
+      case RLike(left, right) =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(left, right).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/replace
+      case StringReplace(srcExpr, searchExpr, replaceExpr) =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(srcExpr, searchExpr, replaceExpr).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/trim
+      case StringTrimBoth(srcStr, trimStrOpt, _) =>
+        functionStatement(
+          "TRIM",
+          (Seq(srcStr) ++ optionalExprToFuncArg(trimStrOpt)).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/to_decimal
+      case ToNumber(left, right) =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(left, right).map(convertStatement(_, fields)),
+        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
       case _: Uuid => functionStatement("UUID_STRING", Seq.empty)

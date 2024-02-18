@@ -104,10 +104,10 @@ package object querygeneration {
     fields: Seq[Attribute]
   ): SnowflakeSQLStatement = {
     (expression, fields) match {
-      case StructStatement(stmt) => stmt
       case AggregationStatement(stmt) => stmt
       case BasicStatement(stmt) => stmt
       case BooleanStatement(stmt) => stmt
+      case CollectionStatement(stmt) => stmt
       case CryptographicStatement(stmt) => stmt
       case DateStatement(stmt) => stmt
       case MiscStatement(stmt) => stmt
@@ -150,6 +150,12 @@ package object querygeneration {
           Alias(expr, altName)(expr.exprId, Seq.empty[String], Some(metadata))
       }
     }
+  }
+
+  private[querygeneration] def optionalExprToFuncArg(
+    exprOpt: Option[Expression]
+  ): Seq[Expression] = {
+    exprOpt.map { expr => Seq(expr) }.getOrElse(Seq.empty)
   }
 
   private[querygeneration] def functionStatement(
