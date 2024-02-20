@@ -493,7 +493,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
   // Aggregate-style
 
-  test("AIQ test approx_count_dist") {
+  test("AIQ test pushdown approx_count_dist") {
     jdbcUpdate(s"create or replace table $test_table_date (s string, i int)")
     (0 until 100).foreach { i =>
       if (i % 5 == 0) {
@@ -917,6 +917,82 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown xxhash64") {
+    jdbcUpdate(s"create or replace table $test_table_string " +
+      s"(id bigint, s1 string, s2 string)")
+    jdbcUpdate(s"insert into $test_table_string values " +
+      s"""
+         |(1, 'snowflake', 'snowflake'),
+         |(2, 'spark', 'spark'),
+         |(2, '', ''),
+         |(3, NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_string)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("xxhash64(s1, s2)", "xxhash64(concat(s1,s2), s2)")
+    // Hash function between Snowflake and Spark operates the same but does not return
+    // the same results for testing the output (Spark uses a Seed) so skipping here
+    testPushdownSql(
+      s"""
+         |SELECT (
+         |  HASH ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    HASH (
+         |      CONCAT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" ) , "SUBQUERY_0"."S2"
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1"
+         |FROM (
+         |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+    )
+
+    val resultDFGroupBy = tmpDF
+      .select(
+        col("id"),
+        expr("xxhash64(s1, s2) as hash_1"),
+        expr("xxhash64(concat(s1,s2), s2) as hash_2"),
+      )
+      .groupBy("id")
+      .agg("hash_1" -> "max", "hash_2" -> "max")
+      .selectExpr("*")
+    // Hash function between Snowflake and Spark operates the same but does not return
+    // the same results for testing the output (Spark uses a Seed) so skipping here
+    testPushdownSql(
+      s"""
+         |SELECT
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |  ( MAX ( "SUBQUERY_1"."SUBQUERY_1_COL_1" ) ) AS "SUBQUERY_2_COL_1" ,
+         |  ( MAX ( "SUBQUERY_1"."SUBQUERY_1_COL_2" ) ) AS "SUBQUERY_2_COL_2"
+         |FROM (
+         |  SELECT
+         |    ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
+         |    ( HASH ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" ) ) AS "SUBQUERY_1_COL_1" ,
+         |    (
+         |      HASH (
+         |        CONCAT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" ) ,
+         |        "SUBQUERY_0"."S2"
+         |      )
+         |    ) AS "SUBQUERY_1_COL_2"
+         |  FROM (
+         |    SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |) AS "SUBQUERY_1"
+         |GROUP BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFGroupBy,
+    )
+  }
+
+  // Collection-Style
+
   //  test("AIQ test pushdown array") {
   //    jdbcUpdate(s"create or replace table $test_table_basic " +
   //      s"(s1 string, s2 string, i1 bigint, i2 bigint)")
@@ -1054,6 +1130,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
   //        .sorted == Seq(1, 2, 3).sorted
   //    )
   //  }
+
+  // String-Style
 
   test("AIQ test pushdown instr") {
     jdbcUpdate(s"create or replace table $test_table_string " +
