@@ -64,6 +64,389 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
   // Date-Style
 
+  test("AIQ test pushdown datediff") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d1 date, d2 date)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2020-07-29', '2020-07-28'),
+         |('2020-07-31', '2020-07-29'),
+         |('2020-07-28', '2020-07-29'),
+         |('2020-07-29', '2020-07-31'),
+         |(NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("datediff(d1, d2)")
+    val expectedResult = Seq(Row(1L), Row(2L), Row(-1L), Row(-2L), Row(null))
+    testPushdown(
+      s"""
+         |SELECT (
+         |  DATEDIFF ( 'DAY' , "SUBQUERY_0"."D2" , "SUBQUERY_0"."D1" )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown hour") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("hour(d)", "hour(t)", "hour(s)")
+    val expectedResult = Seq(
+      Row(0, 13, 13),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( HOUR ( CAST ( "SUBQUERY_0"."D" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( HOUR ( "SUBQUERY_0"."T" ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( HOUR ( CAST ( "SUBQUERY_0"."S" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown minute") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("minute(d)", "minute(t)", "minute(s)")
+    val expectedResult = Seq(
+      Row(0, 10, 10),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( MINUTE ( CAST ( "SUBQUERY_0"."D" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( MINUTE ( "SUBQUERY_0"."T" ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( MINUTE ( CAST ( "SUBQUERY_0"."S" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown second") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("second(d)", "second(t)", "second(s)")
+    val expectedResult = Seq(
+      Row(0, 15, 15),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( SECOND ( CAST ( "SUBQUERY_0"."D" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( SECOND ( "SUBQUERY_0"."T" ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( SECOND ( CAST ( "SUBQUERY_0"."S" AS TIMESTAMP ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown dayofmonth") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("dayofmonth(d)", "dayofmonth(t)", "dayofmonth(s)")
+    val expectedResult = Seq(
+      Row(8, 8, 8),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( DAYOFMONTH ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( DAYOFMONTH ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( DAYOFMONTH ( CAST ( "SUBQUERY_0"."S" AS DATE ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown dayofyear") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("dayofyear(d)", "dayofyear(t)", "dayofyear(s)")
+    val expectedResult = Seq(
+      Row(98, 98, 98),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( DAYOFYEAR ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( DAYOFYEAR ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( DAYOFYEAR ( CAST ( "SUBQUERY_0"."S" AS DATE ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown weekofyear") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("weekofyear(d)", "weekofyear(t)", "weekofyear(s)")
+    val expectedResult = Seq(
+      Row(15, 15, 15),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( WEEKOFYEAR ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( WEEKOFYEAR ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( WEEKOFYEAR ( CAST ( "SUBQUERY_0"."S" AS DATE ) ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown last_day") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "cast(last_day(d) as string)",
+      "cast(last_day(t) as string)",
+      "cast(last_day(s) as string)"
+    )
+    val expectedResult = Seq(
+      Row("2015-04-30", "2015-04-30", "2015-04-30"),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( CAST ( LAST_DAY ( "SUBQUERY_0"."D" , 'MONTH' ) AS VARCHAR ) ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    CAST (
+         |      LAST_DAY ( CAST ( "SUBQUERY_0"."T" AS DATE ) , 'MONTH' ) AS VARCHAR
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1" ,
+         |  (
+         |    CAST (
+         |      LAST_DAY ( CAST ( "SUBQUERY_0"."S" AS DATE ) , 'MONTH' ) AS VARCHAR
+         |    )
+         |  ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown months_between") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d1 date, d2 date)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('1997-02-28', '1996-10-30'),
+         |('2020-02-01', '2020-01-01'),
+         |(NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("round(months_between(d1, d2), 6)")
+    val expectedResult = Seq(
+      Row(3.935484),
+      Row(1.000000),
+      Row(null),
+    )
+    testPushdown(
+      s"""
+         |SELECT (
+         |  ROUND (
+         |    MONTHS_BETWEEN (
+         |      CAST ( "SUBQUERY_0"."D1" AS TIMESTAMP ) ,
+         |      CAST ( "SUBQUERY_0"."D2" AS TIMESTAMP )
+         |    ) ,
+         |    6
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown next_day") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(dt date, d string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-01-14', 'TU'),
+         |('2015-01-14', 'WE'),
+         |('2015-01-14', 'FR'),
+         |(NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("cast(next_day(dt, d) as string)")
+    val expectedResult = Seq(
+      Row("2015-01-20"),
+      Row("2015-01-21"),
+      Row("2015-01-16"),
+      Row(null),
+    )
+    testPushdown(
+      s"""
+         |SELECT (
+         |  CAST (
+         |    NEXT_DAY ( "SUBQUERY_0"."DT" , "SUBQUERY_0"."D" ) AS VARCHAR
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   test("AIQ test pushdown day_start") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(ts bigint, tz string, pd int)")

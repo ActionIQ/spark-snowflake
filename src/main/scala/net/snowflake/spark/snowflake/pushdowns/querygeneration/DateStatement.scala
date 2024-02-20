@@ -156,8 +156,9 @@ private[querygeneration] object DateStatement {
       case DateDiff(endDate, startDate) =>
         functionStatement(
           expr.prettyName.toUpperCase,
+          // Using `DAY` because the Spark equivalent returns the number of days
           Seq(ConstantString("'DAY'").toStatement) ++
-          // arguments are in reverse order in Snowflake so exchanging here
+          // arguments are in reverse order in Snowflake so exchanging the sign here
           Seq(startDate, endDate).map(convertStatement(_, fields)),
         )
 
@@ -171,6 +172,8 @@ private[querygeneration] object DateStatement {
       case _: Month | _: Quarter | _: Year |
            _: TruncDate | _: TruncTimestamp |
            // https://docs.snowflake.com/en/sql-reference/functions/hour-minute-second
+           // In Snowflake, DateType does NOT save the time part which means that the
+           // following functions will return 0
            _: Hour | _: Minute | _: Second |
            // https://docs.snowflake.com/en/sql-reference/functions/year
            _: DayOfMonth | _: DayOfYear | _: WeekOfYear =>
@@ -181,7 +184,12 @@ private[querygeneration] object DateStatement {
       case LastDay(startDate) =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(startDate, fields)),
+          Seq(
+            convertStatement(startDate, fields),
+            // Using `MONTH` because the Spark equivalent returns
+            // the last day of the month which the date belongs to
+            ConstantString("'MONTH'").toStatement,
+          ),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/months_between
