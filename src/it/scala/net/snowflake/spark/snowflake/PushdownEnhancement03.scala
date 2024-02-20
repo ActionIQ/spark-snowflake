@@ -21,6 +21,7 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.snowflake.SFQueryTest
 
 // scalastyle:off println
 class PushdownEnhancement03 extends IntegrationSuiteBase {
@@ -60,13 +61,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
   private def testString(id: Option[Int] = None): String =
     "hello this is a test" + id.map(s => s.toString).getOrElse("")
-
-  private def checkDataFrame(df: DataFrame, result: DataFrame): Unit = {
-    assert(
-      df.except(result).isEmpty && df.unionAll(result).except(df.intersect(result)).isEmpty,
-      "Resulting dataframe did not match the expected result"
-    )
-  }
 
   // Date-Style
 
@@ -570,17 +564,25 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_basic)
       .load()
 
-    val resultDFStr = tmpDF.selectExpr("collect_list(s1)")
-    val resultDFInt = tmpDF.selectExpr("collect_list(s2)")
-    val resultDFGroupBy = tmpDF
-      .groupBy(col("id"))
-      .agg("s1" -> "collect_list", "s2" -> "collect_list")
-      .selectExpr("*")
-
+    val resultDFStr = tmpDF.selectExpr("sort_array(collect_list(s1))")
+    val expectedResultStr = Seq(
+      Row(
+        Array(
+          testString(),
+          testString(),
+          testString(Some(1)),
+          testString(Some(2))
+        )
+      )
+    )
     testPushdownSql(
       s"""
          |SELECT (
-         |  ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |  ARRAY_SORT (
+         |    ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ,
+         |    true ,
+         |    true
+         |  )
          |) AS "SUBQUERY_2_COL_0"
          |FROM (
          |  SELECT ( "SUBQUERY_0"."S1" ) AS "SUBQUERY_1_COL_0"
@@ -589,19 +591,20 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_0"
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFStr
+      resultDFStr,
     )
-    // Cannot test the expected result cause the order of the items
-    // returned in the array is non-deterministic so testing here
-    assert(
-      resultDFStr.collect().head.get(0).asInstanceOf[Seq[String]].sorted ==
-        Seq.fill(2)(testString()) ++ Seq(testString(Some(1)), testString(Some(2))).sorted
-    )
+    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
 
+    val resultDFInt = tmpDF.selectExpr("sort_array(collect_list(s2))")
+    val expectedResultInt = Seq(Row(Array(1, 1, 2, 3).map(BigDecimal(_))))
     testPushdownSql(
       s"""
          |SELECT (
-         |  ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |  ARRAY_SORT (
+         |    ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ,
+         |    true ,
+         |    true
+         |  )
          |) AS "SUBQUERY_2_COL_0"
          |FROM (
          |  SELECT ( "SUBQUERY_0"."S2" ) AS "SUBQUERY_1_COL_0"
@@ -610,43 +613,44 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_0"
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFInt
+      resultDFInt,
     )
-    // Cannot test the expected result cause the order of the items
-    // returned in the array is non-deterministic so testing here
-    assert(
-      resultDFInt
-        .collect()
-        .head
-        .get(0)
-        .asInstanceOf[Seq[java.math.BigDecimal]]
-        .map(_.intValue)
-        .sorted == Seq(1, 1, 2, 3).sorted
-    )
+    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 
+    val resultDFGroupBy = tmpDF
+      .groupBy("id")
+      .agg(
+        expr("collect_list(s1) as s1_agg"),
+        expr("collect_list(s2) as s2_agg"),
+      )
+      .select(
+        col("id"),
+        expr("sort_array(s1_agg)"),
+        expr("sort_array(s2_agg)"),
+      )
+    val expectedResultGroupBy = Seq(
+      Row(
+        BigDecimal(1),
+        Array(testString(), testString(Some(1)), testString(Some(2))),
+        Array(1, 1, 2).map(BigDecimal(_))
+      ),
+      Row(BigDecimal(2), Array(testString()), Array(BigDecimal(3))),
+      Row(null, Array(), Array()),
+    )
     testPushdownSql(
       s"""
          |SELECT
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
-         |  ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) ) AS "SUBQUERY_1_COL_1" ,
-         |  ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) ) AS "SUBQUERY_1_COL_2"
+         |  ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true ) ) AS "SUBQUERY_1_COL_2"
          |FROM (
          |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
          |GROUP BY "SUBQUERY_0"."ID"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFGroupBy
+      resultDFGroupBy,
     )
-
-//    // Cannot test the expected result cause the order of the items
-//    // returned in the array is non-deterministic so testing here
-//    import testImplicits._
-//    val expectedResultGroupBy = Seq(
-//        (1, Array(testString(), testString(Some(1)), testString(Some(2))), Array(1, 1, 2)),
-//        (2, Array(testString()), Array(3)),
-//        (null, Array(), Array()),
-//      ).toDF()
-//    checkDataFrame(resultDFGroupBy, expectedResultGroupBy)
+    SFQueryTest.checkAnswer(resultDFGroupBy, expectedResultGroupBy)
   }
 
   test("AIQ test pushdown collect_set") {
@@ -654,10 +658,10 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       s"(id bigint, s1 string, s2 bigint)")
     jdbcUpdate(s"insert into $test_table_basic values " +
       s"""
-         |(1, 'hello this is a test1', 1),
-         |(1, 'hello this is a test2', 1),
-         |(1, 'hello this is a test', 2),
-         |(2, 'hello this is a test', 3),
+         |(1, '${testString(Some(1))}', 1),
+         |(1, '${testString(Some(2))}', 1),
+         |(1, '${testString()}', 2),
+         |(2, '${testString()}', 3),
          |(NULL, NULL, NULL)
          |""".stripMargin.linesIterator.mkString(" ").trim
     )
@@ -668,17 +672,24 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_basic)
       .load()
 
-    val resultDFStr = tmpDF.selectExpr("collect_set(s1)")
-    val resultDFInt = tmpDF.selectExpr("collect_set(s2)")
-    val resultDFGroupBy = tmpDF
-      .groupBy(col("id"))
-      .agg("s1" -> "collect_set", "s2" -> "collect_set")
-      .selectExpr("*")
-
+    val resultDFStr = tmpDF.selectExpr("sort_array(collect_set(s1))")
+    val expectedResultStr = Seq(
+      Row(
+        Array(
+          testString(),
+          testString(Some(1)),
+          testString(Some(2))
+        )
+      )
+    )
     testPushdownSql(
       s"""
          |SELECT (
-         |  ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |  ARRAY_SORT (
+         |    ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ,
+         |    true ,
+         |    true
+         |  )
          |) AS "SUBQUERY_2_COL_0"
          |FROM (
          |  SELECT ( "SUBQUERY_0"."S1" ) AS "SUBQUERY_1_COL_0"
@@ -687,19 +698,20 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_0"
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFStr
+      resultDFStr,
     )
-    // Cannot test the expected result cause the order of the items
-    // returned in the array is non-deterministic so testing here
-    assert(
-      resultDFStr.collect().head.get(0).asInstanceOf[Seq[String]].sorted ==
-        Seq("hello this is a test", "hello this is a test1", "hello this is a test2").sorted
-    )
+    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
 
+    val resultDFInt = tmpDF.selectExpr("sort_array(collect_set(s2))")
+    val expectedResultInt = Seq(Row(Array(1, 2, 3).map(BigDecimal(_))))
     testPushdownSql(
       s"""
          |SELECT (
-         |  ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" )
+         |  ARRAY_SORT (
+         |    ARRAY_AGG ( DISTINCT "SUBQUERY_1"."SUBQUERY_1_COL_0" ) ,
+         |    true ,
+         |    true
+         |  )
          |) AS "SUBQUERY_2_COL_0"
          |FROM (
          |  SELECT ( "SUBQUERY_0"."S2" ) AS "SUBQUERY_1_COL_0"
@@ -708,33 +720,44 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_0"
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFInt
+      resultDFInt,
     )
-    // Cannot test the expected result cause the order of the items
-    // returned in the array is non-deterministic so testing here
-    assert(
-      resultDFInt
-        .collect()
-        .head
-        .get(0)
-        .asInstanceOf[Seq[java.math.BigDecimal]]
-        .map(_.intValue)
-        .sorted == Seq(1, 2, 3).sorted
-    )
+    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 
+    val resultDFGroupBy = tmpDF
+      .groupBy("id")
+      .agg(
+        expr("collect_set(s1) as s1_agg"),
+        expr("collect_set(s2) as s2_agg"),
+      )
+      .select(
+        col("id"),
+        expr("sort_array(s1_agg)"),
+        expr("sort_array(s2_agg)"),
+      )
+    val expectedResultGroupBy = Seq(
+      Row(
+        BigDecimal(1),
+        Array(testString(), testString(Some(1)), testString(Some(2))),
+        Array(1, 2).map(BigDecimal(_))
+      ),
+      Row(BigDecimal(2), Array(testString()), Array(BigDecimal(3))),
+      Row(null, Array(), Array()),
+    )
     testPushdownSql(
       s"""
          |SELECT
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
-         |  ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S1" ) ) AS "SUBQUERY_1_COL_1" ,
-         |  ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S2" ) ) AS "SUBQUERY_1_COL_2"
+         |  ( ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S1" ) , true , true ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S2" ) , true , true ) ) AS "SUBQUERY_1_COL_2"
          |FROM (
          |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
          |GROUP BY "SUBQUERY_0"."ID"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDFGroupBy
+      resultDFGroupBy,
     )
+    SFQueryTest.checkAnswer(resultDFGroupBy, expectedResultGroupBy)
   }
 
   // Cryptographic-Style
