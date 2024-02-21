@@ -1144,10 +1144,61 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
   test("AIQ test pushdown to_timestamp") {
     jdbcUpdate(s"create or replace table $test_table_date " +
-      s"(s1 string, s2 string, s3 string)")
+      s"(s1 string, s2 string, s3 string, d date)")
     jdbcUpdate(s"insert into $test_table_date values " +
       s"""
-         |('2019-08-12', '2019-08-12 01:00:00', '2019/08/12'),
+         |('2019-08-12', '2019-08-12 01:00:00', '2019/08/12', '2019-08-12'),
+         |(NULL, NULL, NULL, NULL)
+         |"""
+        .stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    // `to_timestamp` without format for strings does a
+    // simple casting which we don't need to test here
+    val resultDF = tmpDF.selectExpr(
+      "to_timestamp(s1, 'yyyy-MM-dd')",
+      "to_timestamp(s2, 'yyyy-MM-dd hh:mm:ss')",
+      "to_timestamp(s3, 'yyyy/MM/dd')",
+      "to_timestamp(d)",
+    )
+    val expectedResult = Seq(
+      Row(
+        Timestamp.valueOf("2019-08-12 00:00:00"),
+        Timestamp.valueOf("2019-08-12 01:00:00"),
+        Timestamp.valueOf("2019-08-12 00:00:00"),
+        Timestamp.valueOf("2019-08-12 00:00:00"),
+      ),
+      Row(null, null, null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S1" , 'yyyy-MM-dd' ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S2" , 'yyyy-MM-dd HH12:mi:SS' ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S3" , 'yyyy/MM/dd' ) ) AS "SUBQUERY_1_COL_2" ,
+         |  ( CAST ( "SUBQUERY_0"."D" AS TIMESTAMP ) ) AS "SUBQUERY_1_COL_3"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown to_date") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(t timestamp, s1 string, s2 string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-08-12 01:00:00', '2019/08/12', '2019-08-12'),
          |(NULL, NULL, NULL)
          |"""
         .stripMargin.linesIterator.mkString(" ").trim
@@ -1156,29 +1207,37 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("timestamp_ntz_output_format", "YYYY-MM-DD HH24:MI:SS.FF1" )
       .option("dbtable", test_table_date)
       .load()
 
+    // `to_timestamp` without format for strings does a
+    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
-      """to_timestamp(s1, "yyyy-MM-dd")""",
-      """to_timestamp(s2, "yyyy-MM-dd hh:mm:ss")""",
-      """to_timestamp(s3, "yyyy/MM/dd")""",
+      "cast(to_date(t) as string)",
+      "cast(to_date(s1, 'yyyy/MM/dd') as string)",
+      "cast(to_date(s2, 'yyyy-MM-dd') as string)",
     )
     val expectedResult = Seq(
-      Row(
-        Timestamp.valueOf("2019-08-12 00:00:00"),
-        Timestamp.valueOf("2019-08-12 01:00:00"),
-        Timestamp.valueOf("2019-08-12 00:00:00")
-      ),
+      Row("2019-08-12", "2019-08-12", "2019-08-12"),
       Row(null, null, null),
     )
 
     testPushdown(
       s"""
+         |SELECT
+         |  ( CAST ( CAST ( "SUBQUERY_0"."T" AS DATE ) AS VARCHAR ) ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    CAST ( CAST ( TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S1" , 'yyyy/MM/dd' ) AS DATE ) AS VARCHAR )
+         |  ) AS "SUBQUERY_1_COL_1" ,
+         |  (
+         |    CAST ( CAST ( TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S2" , 'yyyy-MM-dd' ) AS DATE ) AS VARCHAR )
+         |  ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
-      expectedResult
+      expectedResult,
     )
   }
 

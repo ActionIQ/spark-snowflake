@@ -1,67 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{
-  Add,
-  AddMonths,
-  AiqDateToString,
-  AiqDayDiff,
-  AiqDayOfTheWeek,
-  AiqDayStart,
-  AiqStringToDate,
-  AiqWeekDiff,
-  Attribute,
-  Cast,
-  ConvertTimezone,
-  CurrentTimeZone,
-  DateAdd,
-  DateDiff,
-  DateSub,
-  DayOfMonth,
-  DayOfWeek,
-  DayOfYear,
-  Decode,
-  Divide,
-  Expression,
-  Extract,
-  Floor,
-  FromUTCTimestamp,
-  FromUnixTime,
-  Hour,
-  LastDay,
-  Literal,
-  MakeDate,
-  MakeTimestamp,
-  Minute,
-  Month,
-  MonthsBetween,
-  Multiply,
-  NextDay,
-  ParseToDate,
-  ParseToTimestamp,
-  Quarter,
-  Remainder,
-  Second,
-  Subtract,
-  ToUTCTimestamp,
-  ToUnixTimestamp,
-  TruncDate,
-  TruncTimestamp,
-  UnixMillis,
-  UnixSeconds,
-  UnixTimestamp,
-  WeekDay,
-  WeekOfYear,
-  Year
-}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, GetTimestamp, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
-import org.apache.spark.sql.types.{
-  IntegerType,
-  LongType,
-  NullType,
-  StringType,
-  TimestampType
-}
+import org.apache.spark.sql.types.{IntegerType, LongType, NullType, StringType, TimestampType}
 
 /**
  * Extractor for date-style expressions.
@@ -500,25 +442,20 @@ private[querygeneration] object DateStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_timestamp
       case e: ParseToTimestamp if e.format.forall(_.foldable) =>
-        // This is a workaround for now since TimestampNTZType is private case class in Spark 3.3
-        // Spark 3.4 makes it a public class at which point we can change this logic to use
-        // TimestampType and TimestampNTZType to decide
-        val functionName = e.timeZoneId.map ( _ =>
-          "TO_TIMESTAMP"
-        ).getOrElse(
-          "TO_TIMESTAMP_NTZ" // timestamp with no time zone
-        )
-
         functionStatement(
-          functionName,
+          "TO_TIMESTAMP_NTZ",
           Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(e.format),
         )
 
+      // https://docs.snowflake.com/en/sql-reference/functions/to_timestamp
+      case e: GetTimestamp if e.right.foldable =>
+        convertStatement(ParseToTimestamp(e.left, Some(e.right), e.dataType, e.timeZoneId), fields)
+
       // https://docs.snowflake.com/en/sql-reference/functions/to_date
-      case ParseToDate(left, formatStrOpt, _) if formatStrOpt.forall(_.foldable) =>
+      case e: ParseToDate if e.format.forall(_.foldable) =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(left, fields)) ++ formatToFunctionArg(formatStrOpt),
+          Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(e.format),
         )
 
       // scalastyle:off line.size.limit
