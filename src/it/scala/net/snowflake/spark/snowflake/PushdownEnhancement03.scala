@@ -447,6 +447,224 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown dayofweek") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("dayofweek(d)", "dayofweek(t)", "dayofweek(s)")
+    val expectedResult = Seq(
+      Row(4, 4, 4),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( ( DAYOFWEEK ( "SUBQUERY_0"."D" ) + 1 ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( ( DAYOFWEEK ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) + 1 ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ( DAYOFWEEK ( CAST ( "SUBQUERY_0"."S" AS DATE ) ) + 1 ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown weekday") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2015-04-08 13:10:15', '2015-04-08 13:10:15', '2015-04-08 13:10:15'),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("weekday(d)", "weekday(t)", "weekday(s)")
+    val expectedResult = Seq(
+      Row(2, 2, 2),
+      Row(null, null, null),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( ( DAYOFWEEKISO ( "SUBQUERY_0"."D" ) - 1 ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( ( DAYOFWEEKISO ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) - 1 ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ( DAYOFWEEKISO ( CAST ( "SUBQUERY_0"."S" AS DATE ) ) - 1 ) ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown make_date") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(y bigint, m bigint, d bigint)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |(2015, 4, 8),
+         |(2015, 04, 08),
+         |(NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("cast(make_date(y, m, d) as string)")
+    val expectedResult = Seq(
+      Row("2015-04-08"),
+      Row("2015-04-08"),
+      Row(null),
+    )
+    testPushdown(
+      s"""
+         |SELECT (
+         |  CAST (
+         |    DATE_FROM_PARTS (
+         |      CAST ( "SUBQUERY_0"."Y" AS NUMBER ) ,
+         |      CAST ( "SUBQUERY_0"."M" AS NUMBER ) ,
+         |      CAST ( "SUBQUERY_0"."D" AS NUMBER )
+         |    ) AS VARCHAR
+         |  )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown make_timestamp") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(y bigint, m bigint, d bigint, h bigint, mi bigint, s decimal(16, 6))")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |(2015, 4, 8, 1, 1, 1.123),
+         |(2015, 04, 08, 13, 10, 15.456),
+         |(NULL, NULL, NULL, NULL, NULL, NULL)
+         |""".stripMargin
+    )
+
+    def expectedPushdownSql(timeZone: Boolean = false): String = {
+      val partialFunc =
+        s"""
+           |CAST (
+           |  TIMESTAMP_NTZ_FROM_PARTS (
+           |    CAST ( "SUBQUERY_0"."Y" AS NUMBER ) ,
+           |    CAST ( "SUBQUERY_0"."M" AS NUMBER ) ,
+           |    CAST ( "SUBQUERY_0"."D" AS NUMBER ) ,
+           |    CAST ( "SUBQUERY_0"."H" AS NUMBER ) ,
+           |    CAST ( "SUBQUERY_0"."MI" AS NUMBER ) ,
+           |    CAST ( "SUBQUERY_0"."S" AS NUMBER ) ,
+           |    CAST ( ( ( "SUBQUERY_0"."S" % 1 ) * 1000000000 ) AS NUMBER )
+           |    ) AS VARCHAR
+           |)
+           |"""
+
+      val fullFunc = if (timeZone) {
+        s"""
+           |CAST (
+           |  CONVERT_TIMEZONE (
+           |    'America/New_York' ,
+           |    'UTC' ,
+           |    $partialFunc
+           |  ) AS VARCHAR
+           |)
+           |"""
+      } else { s"$partialFunc" }
+
+      s"""
+         |SELECT (
+         |  $fullFunc
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim
+    }
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("timestamp_tz_output_format", "YYYY-MM-DD HH24:MI:SS.FF3")
+      .option("timestamp_ntz_output_format", "YYYY-MM-DD HH24:MI:SS.FF3" )
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDFNTZ = tmpDF.selectExpr("cast(make_timestamp(y, m, d, h, mi, s) as string)")
+    val expectedResultNTZ = Seq(
+      Row("2015-04-08 01:01:01.123"),
+      Row("2015-04-08 13:10:15.456"),
+      Row(null),
+    )
+    testPushdown(expectedPushdownSql(), resultDFNTZ, expectedResultNTZ)
+
+    val resultDFTZ = tmpDF.selectExpr(
+      "cast(make_timestamp(y, m, d, h, mi, s, 'America/New_York') as string)"
+    )
+    val expectedResultTZ = Seq(
+      Row("2015-04-08 05:01:01.123"),
+      Row("2015-04-08 17:10:15.456"),
+      Row(null),
+    )
+    testPushdown(expectedPushdownSql(true), resultDFTZ, expectedResultTZ)
+
+    // Test for when the sec argument equals to 60 (the seconds field
+    // is set to 0 and 1 minute is added to the final timestamp)
+
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(y bigint, m bigint, d bigint, h bigint, mi bigint, s decimal(16, 6))")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"(2015, 04, 08, 13, 10, 60)"
+    )
+
+    val tmpDFFmt0 = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("timestamp_tz_output_format", "YYYY-MM-DD HH24:MI:SS")
+      .option("timestamp_ntz_output_format", "YYYY-MM-DD HH24:MI:SS" )
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDFFmt0NTZ = tmpDFFmt0.selectExpr("cast(make_timestamp(y, m, d, h, mi, s) as string)")
+    val expectedResultFmt0NTZ = Seq(Row("2015-04-08 13:11:00"))
+    testPushdown(expectedPushdownSql(), resultDFFmt0NTZ, expectedResultFmt0NTZ)
+
+    val resultDFFmt0TZ = tmpDFFmt0.selectExpr(
+      "cast(make_timestamp(y, m, d, h, mi, s, 'America/New_York') as string)"
+    )
+    val expectedResultFmt0TZ = Seq(Row("2015-04-08 17:11:00"))
+    testPushdown(expectedPushdownSql(true), resultDFFmt0TZ, expectedResultFmt0TZ)
+  }
+
   test("AIQ test pushdown day_start") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(ts bigint, tz string, pd int)")

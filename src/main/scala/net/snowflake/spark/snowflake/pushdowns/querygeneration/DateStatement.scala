@@ -1,63 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Add,
-  AddMonths,
-  AiqDateToString,
-  AiqDayDiff,
-  AiqDayOfTheWeek,
-  AiqDayStart,
-  AiqStringToDate,
-  AiqWeekDiff,
-  Attribute,
-  Cast,
-  ConvertTimezone,
-  CurrentTimeZone,
-  DateAdd,
-  DateDiff,
-  DateSub,
-  DayOfMonth,
-  DayOfWeek,
-  DayOfYear,
-  Decode,
-  Divide,
-  Expression,
-  Extract,
-  Floor,
-  FromUTCTimestamp,
-  FromUnixTime,
-  Hour,
-  LastDay,
-  Literal,
-  MakeDate,
-  MakeTimestamp,
-  Minute,
-  Month,
-  MonthsBetween,
-  Multiply,
-  NextDay,
-  ParseToDate,
-  ParseToTimestamp,
-  Quarter,
-  Second,
-  Subtract,
-  ToUTCTimestamp,
-  ToUnixTimestamp,
-  TruncDate,
-  TruncTimestamp,
-  UnixMillis,
-  UnixSeconds,
-  UnixTimestamp,
-  WeekDay,
-  WeekOfYear,
-  Year
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
-import org.apache.spark.sql.types.{LongType, NullType, StringType, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType, NullType, StringType, TimestampType}
 
 /**
  * Extractor for date-style expressions.
@@ -237,21 +183,29 @@ private[querygeneration] object DateStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/timestamp_from_parts
       case MakeTimestamp(year, month, day, hour, min, sec, timezoneOpt, _, _, _) =>
-        val timezoneArg = timezoneOpt.map ( timezoneExpr =>
-          Seq(Literal(0), timezoneExpr)
-        ).getOrElse(Seq.empty)
+        timezoneOpt.map { timezone =>
+          val dateExpr = ConvertTimezone(
+            timezone,
+            Literal("UTC"),
+            MakeTimestamp(year, month, day, hour, min, sec, None),
+          )
 
-        val functionName = timezoneOpt.map(_ =>
-          "TIMESTAMP_TZ_FROM_PARTS"
-        ).getOrElse(
-          "TIMESTAMP_NTZ_FROM_PARTS" // timestamp with no time zone
-        )
+          convertStatement(dateExpr, fields)
+        }.getOrElse {
+          // Snowflake requires an extra argument for nanoseconds which Spark includes
+          // in the Seconds Expression. Splitting it up here and passing it as it is
+          // suppose to be in Snowflake
+          val (secExpr, nanoExpr) = (
+            Cast(sec, IntegerType),
+            Cast(Multiply(Remainder(sec, Literal(1)), Literal(1000000000)), IntegerType)
+          )
 
-        functionStatement(
-          functionName,
-          (Seq(year, month, day, hour, min, sec) ++ timezoneArg)
-            .map(convertStatement(_, fields)),
-        )
+          functionStatement(
+            "TIMESTAMP_NTZ_FROM_PARTS",
+            (Seq(year, month, day, hour, min, secExpr, nanoExpr) ++
+              optionalExprToFuncArg(timezoneOpt)).map(convertStatement(_, fields)),
+          )
+        }
 
       // https://docs.snowflake.com/en/sql-reference/functions/extract
       case Extract(field, source, _) if field.foldable =>
