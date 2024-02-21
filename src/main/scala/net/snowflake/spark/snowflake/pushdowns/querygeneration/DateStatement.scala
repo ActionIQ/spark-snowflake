@@ -157,13 +157,13 @@ private[querygeneration] object DateStatement {
           )
 
       // https://docs.snowflake.com/en/sql-reference/functions/datediff
-      case DateDiff(endDate, startDate) =>
+      case e: DateDiff =>
         functionStatement(
           expr.prettyName.toUpperCase,
           // Using `DAY` because the Spark equivalent returns the number of days
           Seq(ConstantString("'DAY'").toStatement) ++
           // arguments are in reverse order in Snowflake so exchanging the sign here
-          Seq(startDate, endDate).map(convertStatement(_, fields)),
+          Seq(e.startDate, e.endDate).map(convertStatement(_, fields)),
         )
 
       // AddMonths can't be pushdown to snowflake because their functionality is different.
@@ -185,11 +185,11 @@ private[querygeneration] object DateStatement {
           blockStatement(convertStatements(fields, expr.children: _*))
 
       // https://docs.snowflake.com/en/sql-reference/functions/last_day
-      case LastDay(startDate) =>
+      case e: LastDay =>
         functionStatement(
           expr.prettyName.toUpperCase,
           Seq(
-            convertStatement(startDate, fields),
+            convertStatement(e.startDate, fields),
             // Using `MONTH` because the Spark equivalent returns
             // the last day of the month which the date belongs to
             ConstantString("'MONTH'").toStatement,
@@ -197,55 +197,55 @@ private[querygeneration] object DateStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/months_between
-      case MonthsBetween(date1, date2, _, _) =>
+      case e: MonthsBetween =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(date1, date2).map(convertStatement(_, fields)),
+          Seq(e.date1, e.date2).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/next_day
-      case NextDay(startDate, dayOfWeek, _) =>
+      case e: NextDay =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(startDate, dayOfWeek).map(convertStatement(_, fields)),
+          Seq(e.startDate, e.dayOfWeek).map(convertStatement(_, fields)),
         )
 
       // We implement `DayOfWeek` as `DAYOFWEEK` (day of the week as an integer value
       // in the range 0-6, where 0 represents Sunday) +1 since the Spark equivalent
       // returns the day of the week with 1 = Sunday, 2 = Monday, ..., 7 = Saturday
-      case DayOfWeek(child) =>
+      case e: DayOfWeek =>
         blockStatement(
           functionStatement(
             "DAYOFWEEK",
-            Seq(convertStatement(child, fields)),
+            Seq(convertStatement(e.child, fields)),
           ) + ConstantString("+ 1")
         )
 
       // We implement `WeekDay` as `DAYOFWEEK_ISO` (day of the week as an integer value
       // in the range 1-7, where 1 represents Monday) -1 since the Spark equivalent
       // returns the day of the week with 0 = Monday, 1 = Tuesday, ..., 6 = Sunday
-      case WeekDay(child) =>
+      case e: WeekDay =>
         blockStatement(
           functionStatement(
             "DAYOFWEEKISO",
-            Seq(convertStatement(child, fields)),
+            Seq(convertStatement(e.child, fields)),
           ) + ConstantString("- 1")
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/date_from_parts
-      case MakeDate(year, month, day, _) =>
+      case e: MakeDate =>
         functionStatement(
           "DATE_FROM_PARTS",
-          Seq(year, month, day).map(convertStatement(_, fields)),
+          Seq(e.year, e.month, e.day).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/timestamp_from_parts
-      case MakeTimestamp(year, month, day, hour, min, sec, timezoneOpt, _, _, _) =>
-        timezoneOpt.map { timezone =>
+      case e: MakeTimestamp =>
+        e.timezone.map { timezone =>
           val dateExpr = ConvertTimezone(
             timezone,
             Literal("UTC"),
-            MakeTimestamp(year, month, day, hour, min, sec, None),
+            MakeTimestamp(e.year, e.month, e.day, e.hour, e.min, e.sec, None),
           )
 
           convertStatement(dateExpr, fields)
@@ -254,21 +254,21 @@ private[querygeneration] object DateStatement {
           // in the Seconds Expression. Splitting it up here and passing it as it is
           // suppose to be in Snowflake
           val (secExpr, nanoExpr) = (
-            Cast(sec, IntegerType),
-            Cast(Multiply(Remainder(sec, Literal(1)), Literal(1000000000)), IntegerType)
+            Cast(e.sec, IntegerType),
+            Cast(Multiply(Remainder(e.sec, Literal(1)), Literal(1000000000)), IntegerType)
           )
 
           functionStatement(
             "TIMESTAMP_NTZ_FROM_PARTS",
-            (Seq(year, month, day, hour, min, secExpr, nanoExpr) ++
-              optionalExprToFuncArg(timezoneOpt)).map(convertStatement(_, fields)),
+            (Seq(e.year, e.month, e.day, e.hour, e.min, secExpr, nanoExpr) ++
+              optionalExprToFuncArg(e.timezone)).map(convertStatement(_, fields)),
           )
         }
 
       // https://docs.snowflake.com/en/sql-reference/functions/extract
-      case Extract(field, source, _) if field.foldable =>
-        val fieldStr = field.eval().toString
-        val sourceStmt = convertStatement(source, fields)
+      case e: Extract if e.field.foldable =>
+        val fieldStr = e.field.eval().toString
+        val sourceStmt = convertStatement(e.source, fields)
         functionStatement(
           "EXTRACT",
           Seq(ConstantString(fieldStr) + "FROM" + sourceStmt)
@@ -294,13 +294,13 @@ private[querygeneration] object DateStatement {
       )
       -- 1460174400000
        */
-      case AiqDayStart(timestampLong, timezoneStr, plusDaysInt) =>
+      case e: AiqDayStart =>
         val dateExpr = UnixMillis(
           TruncTimestamp(
             Literal("DAY"),
             DateAdd(
-              ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong),
-              plusDaysInt,
+              ConvertTimezone(CurrentTimeZone(), e.timezone, e.timestamp),
+              e.plusDays,
             ),
           )
         )
@@ -324,12 +324,12 @@ private[querygeneration] object DateStatement {
       )
       -- 1567363852000
       */
-      case AiqStringToDate(dateStr, formatStr, timezoneStr) if formatStr.foldable =>
+      case e: AiqStringToDate if e.format.foldable =>
         val dateExpr = UnixMillis(
             ConvertTimezone(
-            timezoneStr,
+            e.timeZone,
             Literal("UTC"),
-            ParseToTimestamp(dateStr, Some(formatStr), TimestampType),
+            ParseToTimestamp(e.dateStr, Some(e.format), TimestampType),
           )
         )
 
@@ -348,9 +348,9 @@ private[querygeneration] object DateStatement {
       )
       -- 2019-09-01 14:50
       */
-      case AiqDateToString(timestampLong, formatStr, timezoneStr) if formatStr.foldable =>
-        val format = sparkDateFmtToSnowflakeDateFmt(formatStr.eval().toString)
-        val dateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, timestampLong)
+      case e: AiqDateToString if e.dateFormat.foldable =>
+        val format = sparkDateFmtToSnowflakeDateFmt(e.dateFormat.eval().toString)
+        val dateExpr = ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.timestamp)
 
         functionStatement(
           "TO_CHAR",
@@ -378,9 +378,9 @@ private[querygeneration] object DateStatement {
       )
       -- 1
       */
-      case AiqDayDiff(startTimestampLong, endTimestampLong, timezoneStr) =>
-        val startDateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, startTimestampLong)
-        val endDateExpr = ConvertTimezone(CurrentTimeZone(), timezoneStr, endTimestampLong)
+      case e: AiqDayDiff =>
+        val startDateExpr = ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.startTs)
+        val endDateExpr = ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.endTs)
 
         convertStatement(DateDiff(endDateExpr, startDateExpr), fields)
 
@@ -417,19 +417,18 @@ private[querygeneration] object DateStatement {
        )
      -- 3
      */
-      case AiqWeekDiff(startTimestampLong, endTimestampLong, startDayStr, timezoneStr)
-        if startDayStr.foldable =>
+      case e: AiqWeekDiff if e.startDay.foldable =>
 
-        val startDayInt = getAiqDayOfWeekFromString(startDayStr.eval().toString)
+        val startDayInt = getAiqDayOfWeekFromString(e.startDay.eval().toString)
         val Seq(daysSinceEndExpr, daysSinceStartExpr) =
-          Seq(endTimestampLong, startTimestampLong).map { expr =>
+          Seq(e.endTs, e.startTs).map { expr =>
             // Wrapping in `FLOOR` because Casting to Int in Snowflake is
             // creating data issues. Example:
             // - Java/Spark: (18140 + 3) / 7 = 2591 (Original value: 2591.8571428571427)
             // - Snowflake: SELECT ((18140 + 3) / 7) ::int = 2592 (Original value: 2591.857143)
             Floor(
               Divide(
-                Add(AiqDayDiff(Literal(0L), expr, timezoneStr), Literal(startDayInt)),
+                Add(AiqDayDiff(Literal(0L), expr, e.timezoneId), Literal(startDayInt)),
                 Literal(7),
               )
             )
@@ -463,10 +462,10 @@ private[querygeneration] object DateStatement {
       // scalastyle:off line.size.limit
       // https://docs.snowflake.com/sql-reference/date-time-examples#retrieving-dates-and-days-of-the-week
       // scalastyle:on line.size.limit
-      case AiqDayOfTheWeek(epochTimestamp, timezoneStr) =>
+      case e: AiqDayOfTheWeek =>
         val dateExpr = Decode(
           Seq(
-            WeekDay(ConvertTimezone(CurrentTimeZone(), timezoneStr, epochTimestamp)),
+            WeekDay(ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.epochTimestamp)),
             Literal(0), Literal("monday"),
             Literal(1), Literal("tuesday"),
             Literal(2), Literal("wednesday"),
@@ -480,33 +479,31 @@ private[querygeneration] object DateStatement {
 
         convertStatement(dateExpr, fields)
 
-      case ConvertTimezone(sourceTz, targetTz, sourceTs) =>
+      case e: ConvertTimezone =>
         // time zone of the input timestamp
-        val sourceArg = sourceTz match {
+        val sourceArg = e.sourceTz match {
           // For the 2-argument version the return value is always of type TIMESTAMP_TZ which means
           // that we don't necessarily need to wrap `ConvertTimezone` around `ParseToTimestamp`
           case _: CurrentTimeZone => Seq.empty
           // For the 3-argument version the return value is always of type TIMESTAMP_NTZ which means
           // that we may have to wrap `ConvertTimezone` around `ParseToTimestamp` or something else
-          case _ => Seq(convertStatement(sourceTz, fields))
+          case _ => Seq(convertStatement(e.sourceTz, fields))
         }
 
         functionStatement(
           expr.prettyName.toUpperCase,
           sourceArg ++ Seq(
-            convertStatement(targetTz, fields), // time zone to be converted
-            convertStatement(Cast(sourceTs, StringType), fields),
+            convertStatement(e.targetTz, fields), // time zone to be converted
+            convertStatement(Cast(e.sourceTs, StringType), fields),
           ),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_timestamp
-      case ParseToTimestamp(left, formatStrOpt, _, timezoneStrOpt)
-        if formatStrOpt.forall(_.foldable) =>
-
+      case e: ParseToTimestamp if e.format.forall(_.foldable) =>
         // This is a workaround for now since TimestampNTZType is private case class in Spark 3.3
         // Spark 3.4 makes it a public class at which point we can change this logic to use
         // TimestampType and TimestampNTZType to decide
-        val functionName = timezoneStrOpt.map ( _ =>
+        val functionName = e.timeZoneId.map ( _ =>
           "TO_TIMESTAMP"
         ).getOrElse(
           "TO_TIMESTAMP_NTZ" // timestamp with no time zone
@@ -514,7 +511,7 @@ private[querygeneration] object DateStatement {
 
         functionStatement(
           functionName,
-          Seq(convertStatement(left, fields)) ++ formatToFunctionArg(formatStrOpt),
+          Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(e.format),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_date

@@ -23,6 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.snowflake.SFQueryTest
 
+import java.sql.Timestamp
+
 // scalastyle:off println
 class PushdownEnhancement03 extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
@@ -1134,6 +1136,46 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |FROM (
          |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+  }
+
+  test("AIQ test pushdown to_timestamp") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(s1 string, s2 string, s3 string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-08-12', '2019-08-12 01:00:00', '2019/08/12'),
+         |(NULL, NULL, NULL)
+         |"""
+        .stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("timestamp_ntz_output_format", "YYYY-MM-DD HH24:MI:SS.FF1" )
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      """to_timestamp(s1, "yyyy-MM-dd")""",
+      """to_timestamp(s2, "yyyy-MM-dd hh:mm:ss")""",
+      """to_timestamp(s3, "yyyy/MM/dd")""",
+    )
+    val expectedResult = Seq(
+      Row(
+        Timestamp.valueOf("2019-08-12 00:00:00"),
+        Timestamp.valueOf("2019-08-12 01:00:00"),
+        Timestamp.valueOf("2019-08-12 00:00:00")
+      ),
+      Row(null, null, null),
+    )
+
+    testPushdown(
+      s"""
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
       expectedResult
