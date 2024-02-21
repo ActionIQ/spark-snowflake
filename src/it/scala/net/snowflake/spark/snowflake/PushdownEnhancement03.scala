@@ -665,6 +665,55 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     testPushdown(expectedPushdownSql(true), resultDFFmt0TZ, expectedResultFmt0TZ)
   }
 
+  test("AIQ test pushdown extract") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(d date, t timestamp)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-08-12', '2019-08-12 01:00:00.123456'),
+         |(NULL, NULL)
+         |""".stripMargin
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "extract('year', d)",
+      "extract('year', t)",
+      "extract('month', d)",
+      "extract('month', t)",
+      "extract('day', d)",
+      "extract('day', t)",
+      "extract('epoch_second', d)",
+      "extract('epoch_second', t)",
+    )
+    val expectedResult = Seq(
+      Row(2019, 2019, 8, 8, 12, 12, 0, 0),
+      Row(null, null, null, null, null, null, null, null),
+    )
+    // Extract re-writes the SQL query
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( YEAR ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( YEAR ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( MONTH ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_2" ,
+         |  ( MONTH ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_3" ,
+         |  ( DAYOFMONTH ( "SUBQUERY_0"."D" ) ) AS "SUBQUERY_1_COL_4" ,
+         |  ( DAYOFMONTH ( CAST ( "SUBQUERY_0"."T" AS DATE ) ) ) AS "SUBQUERY_1_COL_5"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   test("AIQ test pushdown day_start") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(ts bigint, tz string, pd int)")

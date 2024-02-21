@@ -1,9 +1,67 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add,
+  AddMonths,
+  AiqDateToString,
+  AiqDayDiff,
+  AiqDayOfTheWeek,
+  AiqDayStart,
+  AiqStringToDate,
+  AiqWeekDiff,
+  Attribute,
+  Cast,
+  ConvertTimezone,
+  CurrentTimeZone,
+  DateAdd,
+  DateDiff,
+  DateSub,
+  DayOfMonth,
+  DayOfWeek,
+  DayOfYear,
+  Decode,
+  Divide,
+  Expression,
+  Extract,
+  Floor,
+  FromUTCTimestamp,
+  FromUnixTime,
+  Hour,
+  LastDay,
+  Literal,
+  MakeDate,
+  MakeTimestamp,
+  Minute,
+  Month,
+  MonthsBetween,
+  Multiply,
+  NextDay,
+  ParseToDate,
+  ParseToTimestamp,
+  Quarter,
+  Remainder,
+  Second,
+  Subtract,
+  ToUTCTimestamp,
+  ToUnixTimestamp,
+  TruncDate,
+  TruncTimestamp,
+  UnixMillis,
+  UnixSeconds,
+  UnixTimestamp,
+  WeekDay,
+  WeekOfYear,
+  Year
+}
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
-import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType, NullType, StringType, TimestampType}
+import org.apache.spark.sql.types.{
+  IntegerType,
+  LongType,
+  NullType,
+  StringType,
+  TimestampType
+}
 
 /**
  * Extractor for date-style expressions.
