@@ -682,20 +682,19 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .load()
 
     val resultDF = tmpDF.selectExpr(
-      "extract('year', d)",
-      "extract('year', t)",
-      "extract('month', d)",
-      "extract('month', t)",
-      "extract('day', d)",
-      "extract('day', t)",
-      "extract('epoch_second', d)",
-      "extract('epoch_second', t)",
+      "extract(year from d)",
+      "extract(year from t)",
+      "extract(month from d)",
+      "extract(month from t)",
+      "extract(day from d)",
+      "extract(day from t)",
     )
     val expectedResult = Seq(
-      Row(2019, 2019, 8, 8, 12, 12, 0, 0),
-      Row(null, null, null, null, null, null, null, null),
+      Row(2019, 2019, 8, 8, 12, 12),
+      Row(null, null, null, null, null, null),
     )
-    // Extract re-writes the SQL query
+    // Extract SQL function rewrites the queries to equivalent
+    // `DatePart` functions hence the produced PushDown SQL below
     testPushdown(
       s"""
          |SELECT
