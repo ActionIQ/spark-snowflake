@@ -442,9 +442,11 @@ private[querygeneration] object DateStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_timestamp
       case e: ParseToTimestamp if e.format.forall(_.foldable) =>
+        val fmtExpr = if (e.left.dataType.isInstanceOf[StringType]) e.format else None
+
         functionStatement(
           "TO_TIMESTAMP_NTZ",
-          Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(e.format),
+          Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(fmtExpr),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_timestamp
@@ -476,21 +478,15 @@ private[querygeneration] object DateStatement {
       case e: FromUTCTimestamp =>
         convertStatement(ConvertTimezone(Literal("UTC"), e.right, e.left), fields)
 
-      case ToUnixTimestamp(timeExp, formatStr, _, _) =>
+      case e: ToUnixTimestamp =>
         val dateExpr = UnixSeconds(
-          ParseToTimestamp(timeExp, Some(formatStr), TimestampType)
+          ParseToTimestamp(e.timeExp, Some(e.format), TimestampType)
         )
 
         convertStatement(dateExpr, fields)
 
-      case ToUTCTimestamp(left, right) =>
-        val dateExpr = ParseToTimestamp(
-          ConvertTimezone(right, Literal("UTC"), left),
-          Some(Literal(TimestampFormatter.defaultPattern)),
-          TimestampType,
-        )
-
-        convertStatement(dateExpr, fields)
+      case e: ToUTCTimestamp =>
+        convertStatement(ConvertTimezone(e.right, Literal("UTC"), e.left), fields)
 
       case UnixTimestamp(timeExp, formatStr, _, _) =>
         val dateExpr = UnixSeconds(
