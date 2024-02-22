@@ -1499,6 +1499,56 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown unix_timestamp") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(t timestamp, d date, s1 string, s2 string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-08-12 01:00:00', '2019-08-12', '2019-08-12', '2019/08/12'),
+         |(NULL, NULL, NULL, NULL)
+         |"""
+        .stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    // `to_timestamp` without format for strings does a
+    // simple casting which we don't need to test here
+    val resultDF = tmpDF.selectExpr(
+      "unix_timestamp(t, 'yyyy-MM-dd')",
+      "unix_timestamp(d, 'yyyy-MM-dd')",
+      "unix_timestamp(s1, 'yyyy-MM-dd')",
+      "unix_timestamp(s2, 'yyyy/MM/dd')",
+    )
+    val expectedResult = Seq(
+      Row(1565571600L, 1565568000L, 1565568000L, 1565568000L),
+      Row(null, null, null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( DATE_PART ( 'EPOCH_SECOND' , TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."T" ) ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( DATE_PART ( 'EPOCH_SECOND' , TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."D" ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  (
+         |    DATE_PART ( 'EPOCH_SECOND' , TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S1" , 'yyyy-MM-dd' ) )
+         |  ) AS "SUBQUERY_1_COL_2" ,
+         |  (
+         |    DATE_PART ( 'EPOCH_SECOND' , TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S2" , 'yyyy/MM/dd' ) )
+         |  ) AS "SUBQUERY_1_COL_3"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   // Aggregate-style
 
   test("AIQ test pushdown approx_count_dist") {

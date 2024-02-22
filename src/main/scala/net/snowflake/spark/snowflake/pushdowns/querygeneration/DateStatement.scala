@@ -488,32 +488,28 @@ private[querygeneration] object DateStatement {
       case e: ToUTCTimestamp =>
         convertStatement(ConvertTimezone(e.right, Literal("UTC"), e.left), fields)
 
-      case UnixTimestamp(timeExp, formatStr, _, _) =>
+      case e: UnixTimestamp =>
         val dateExpr = UnixSeconds(
-          ParseToTimestamp(
-            timeExp,
-            Some(formatStr),
-            TimestampType,
-          ),
+          ParseToTimestamp(e.timeExp, Some(e.format), TimestampType)
         )
 
         convertStatement(dateExpr, fields)
 
-      case UnixSeconds(child) =>
+      case e: UnixSeconds =>
         functionStatement(
           "DATE_PART",
           Seq(
             ConstantString("'EPOCH_SECOND'").toStatement,
-            convertStatement(child, fields),
+            convertStatement(e.child, fields),
           )
         )
 
-      case UnixMillis(child) =>
+      case e: UnixMillis =>
         functionStatement(
           "DATE_PART",
           Seq(
             ConstantString("'EPOCH_MILLISECOND'").toStatement,
-            convertStatement(child, fields),
+            convertStatement(e.child, fields),
           )
         )
 
