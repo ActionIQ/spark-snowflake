@@ -2133,6 +2133,55 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  // Misc-Style
+
+  test("AIQ test pushdown decode") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(i bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"(1), (2), (3), (NULL)"
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "decode(i, 1, 'snowflake', 2, 'spark', 'n/a')",
+      "decode(i, 1, 'snowflake', 2, 'spark')",
+    )
+    val expectedResult = Seq(
+      ("snowflake", "snowflake"),
+      ("spark", "spark"),
+      ("n/a", null),
+      ("n/a", null)
+    ).map{ case (col1, col2) => Row(col1, col2) }
+
+    // Decode get rewritten during runtime hence
+    // the resulting PushDown SQL below
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    CASE WHEN EQUAL_NULL ( "SUBQUERY_0"."I" , 1 ) THEN 'snowflake'
+         |         WHEN EQUAL_NULL ( "SUBQUERY_0"."I" , 2 ) THEN 'spark'
+         |    ELSE 'n/a' END
+         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    CASE WHEN EQUAL_NULL ( "SUBQUERY_0"."I" , 1 ) THEN 'snowflake'
+         |         WHEN EQUAL_NULL ( "SUBQUERY_0"."I" , 2 ) THEN 'spark' END
+         |  ) AS "SUBQUERY_1_COL_1"
+         |FROM (
+         |  SELECT * FROM ( $test_table_basic  ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   // Collection-Style
 
   //  test("AIQ test pushdown array") {
