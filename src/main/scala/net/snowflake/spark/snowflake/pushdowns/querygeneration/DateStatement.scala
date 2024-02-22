@@ -1,9 +1,71 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, GetTimestamp, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
-import org.apache.spark.sql.types.{IntegerType, LongType, NullType, StringType, TimestampType}
+import net.snowflake.spark.snowflake.{
+  ConstantString,
+  SnowflakeSQLStatement
+}
+import org.apache.spark.sql.catalyst.expressions.{
+  Add,
+  AddMonths,
+  AiqDateToString,
+  AiqDayDiff,
+  AiqDayOfTheWeek,
+  AiqDayStart,
+  AiqFromUnixTime,
+  AiqStringToDate,
+  AiqWeekDiff,
+  Attribute,
+  Cast,
+  ConvertTimezone,
+  CurrentTimeZone,
+  DateAdd,
+  DateDiff,
+  DateSub,
+  DayOfMonth,
+  DayOfWeek,
+  DayOfYear,
+  Decode,
+  Divide,
+  Expression,
+  Extract,
+  Floor,
+  FromUTCTimestamp,
+  FromUnixTime,
+  GetTimestamp,
+  Hour,
+  LastDay,
+  Literal,
+  MakeDate,
+  MakeTimestamp,
+  Minute,
+  Month,
+  MonthsBetween,
+  Multiply,
+  NextDay,
+  ParseToDate,
+  ParseToTimestamp,
+  Quarter,
+  Remainder,
+  Second,
+  Subtract,
+  ToUTCTimestamp,
+  ToUnixTimestamp,
+  TruncDate,
+  TruncTimestamp,
+  UnixMillis,
+  UnixSeconds,
+  UnixTimestamp,
+  WeekDay,
+  WeekOfYear,
+  Year
+}
+import org.apache.spark.sql.types.{
+  IntegerType,
+  LongType,
+  NullType,
+  StringType,
+  TimestampType
+}
 
 /**
  * Extractor for date-style expressions.
@@ -420,6 +482,26 @@ private[querygeneration] object DateStatement {
         )
 
         convertStatement(dateExpr, fields)
+
+      /*
+      --- spark.sql(
+      ---   """select aiq_from_unixtime(0, 'yyyy-MM-dd HH:mm:ss', 'UTC')"""
+      --- ).as[String].collect.head == 1970-01-01 00:00:00
+      SELECT (
+        TO_CHAR(
+          CONVERT_TIMEZONE('UTC', CAST(CAST(0 AS NUMBER) AS VARCHAR)),
+          'yyyy-MM-dd HH24:mi:SS'
+        )
+      )
+      -- 1970-01-01 00:00:00
+      */
+      case e: AiqFromUnixTime if e.format.foldable =>
+        val dateExpr = ConvertTimezone(CurrentTimeZone(), e.timeZone, e.sec)
+
+        functionStatement(
+          "TO_CHAR",
+          Seq(convertStatement(dateExpr, fields)) ++ formatToFunctionArg(Some(e.format)),
+        )
 
       case e: ConvertTimezone =>
         // time zone of the input timestamp

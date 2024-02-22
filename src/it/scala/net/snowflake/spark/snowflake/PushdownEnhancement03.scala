@@ -1142,6 +1142,44 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown aiq_from_unixtime") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(ts bigint)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"(0), (NULL)"
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "aiq_from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC')"
+    )
+    val expectedResult = Seq(Row("1970-01-01 00:00:00"), Row(null))
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    TO_CHAR (
+         |      CONVERT_TIMEZONE (
+         |        'UTC' ,
+         |        CAST ( CAST ( "SUBQUERY_0"."TS" AS NUMBER ) AS VARCHAR )
+         |      ) ,
+         |      'yyyy-MM-dd HH24:mi:SS'
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   test("AIQ test pushdown to_timestamp") {
     jdbcUpdate(s"create or replace table $test_table_date " +
       s"(s1 string, s2 string, s3 string, d date)")
