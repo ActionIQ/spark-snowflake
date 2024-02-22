@@ -37,8 +37,8 @@ private[querygeneration] object CryptographicStatement {
 
     Option(expr match {
       // https://docs.snowflake.com/en/sql-reference/functions/md5
-      case Md5(child) =>
-        val childExpr = child match {
+      case e: Md5 =>
+        val childExpr = e.child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(c, _: BinaryType, tZ, ansiEn) => Cast(c, StringType, tZ, ansiEn)
@@ -50,8 +50,8 @@ private[querygeneration] object CryptographicStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/sha1
-      case Sha1(child) =>
-        val childExpr = child match {
+      case e: Sha1 =>
+        val childExpr = e.child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(c, _: BinaryType, tZ, ansiEn) => Cast(c, StringType, tZ, ansiEn)
@@ -63,8 +63,8 @@ private[querygeneration] object CryptographicStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/sha2
-      case Sha2(left, right) =>
-        val leftExpr = left match {
+      case e: Sha2 =>
+        val leftExpr = e.left match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
           case Cast(l, _: BinaryType, tZ, ansiEn) => Cast(l, StringType, tZ, ansiEn)
@@ -72,14 +72,14 @@ private[querygeneration] object CryptographicStatement {
         }
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(leftExpr, right).map(convertStatement(_, fields)),
+          Seq(leftExpr, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/hash
-      case XxHash64(children, _) =>
+      case e: XxHash64 =>
         functionStatement(
           "HASH",
-          Seq(convertStatements(fields, children: _*)),
+          Seq(convertStatements(fields, e.children: _*)),
         )
 
       case _ => null
