@@ -121,10 +121,13 @@ private[querygeneration] object StringStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
-      case e: RegExpExtractAll =>
+      case RegExpExtractAll(subject, Literal(pattern: UTF8String, StringType), idx) =>
+        // We need Java escape rules for the regex not Scala ones
+        val regExpr = Literal(StringEscapeUtils.escapeJava(pattern.toString))
+
         functionStatement(
           "REGEXP_SUBSTR_ALL",
-          Seq(e.subject, e.regexp, position, occurrence, regex_parameters, e.idx)
+          Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
             .map(convertStatement(_, fields)),
         )
 

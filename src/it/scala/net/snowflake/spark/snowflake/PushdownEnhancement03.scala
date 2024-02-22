@@ -2227,7 +2227,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_0"
          |""".stripMargin,
       pushDf,
-      Seq(Row(1))
+      Seq(Row(1)),
     )
   }
 
@@ -2328,7 +2328,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
-      expectedResult
+      expectedResult,
     )
   }
 
@@ -2417,8 +2417,76 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
-      expectedResult
+      expectedResult,
     )
+  }
+
+  test("AIQ test pushdown regexp_extract_all") {
+    jdbcUpdate(s"create or replace table $test_table_string " +
+      s"(s string)")
+    jdbcUpdate(s"insert into $test_table_string values " +
+      s"""
+         |('snowflake-snowflake'),
+         |('spark-spark'),
+         |(''),
+         |(NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_string)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "regexp_extract_all(s, '(\\\\w+)-(\\\\w+)', 1)",
+      "regexp_extract_all(s, NULL, 1)",
+      "regexp_extract_all(s, '(\\\\w+)-(\\\\w+)', NULL)",
+      "regexp_extract_all(concat(concat(s, ' '),s), '(\\\\w+)-(\\\\w+)', 1)",
+    )
+    val expectedResult = Seq(
+      Row(Array("snowflake"), null, null, Array("snowflake", "snowflake")),
+      Row(Array("spark"), null, null, Array("spark", "spark")),
+      Row(Array(), null, null, Array()),
+      Row(null, null, null, null),
+    )
+
+    testPushdownSql(
+      s"""
+         |SELECT
+         |  (
+         |    REGEXP_SUBSTR_ALL (
+         |      "SUBQUERY_0"."S" ,
+         |      '(\\\\w+)-(\\\\w+)' ,
+         |      1 ,
+         |      1 ,
+         |      'c' ,
+         |      1
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |  ( NULL ) AS "SUBQUERY_1_COL_2" ,
+         |  (
+         |    REGEXP_SUBSTR_ALL (
+         |      CONCAT (
+         |        "SUBQUERY_0"."S" ,
+         |        CONCAT ( '' , "SUBQUERY_0"."S" )
+         |      ) ,
+         |      '(\\\\w+)-(\\\\w+)' ,
+         |      1 ,
+         |      1 ,
+         |      'c' ,
+         |      1
+         |    )
+         |  ) AS "SUBQUERY_1_COL_3"
+         |FROM (
+         |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+    )
+    SFQueryTest.checkAnswer(resultDF, expectedResult)
   }
 
   test("AIQ test pushdown reverse") {
