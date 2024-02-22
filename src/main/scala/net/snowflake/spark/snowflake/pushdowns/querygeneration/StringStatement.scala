@@ -15,6 +15,10 @@ private[querygeneration] object StringStatement {
   // RegExpExtract and RegExpExtractAll Snowflake Defaults non-existent in Spark
   private val Seq(position, occurrence, regex_parameters) = Seq.fill(2)(Literal(1)) ++ Seq(Literal("c"))
 
+  // We need Java escape rules for the regex not Scala ones
+  private def patternStrToJavaEscapedRegExpr(pattern: UTF8String): Expression =
+    Literal(StringEscapeUtils.escapeJava(pattern.toString))
+
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
     * be matched and the fields that define the valid fields in the current expression
@@ -96,8 +100,7 @@ private[querygeneration] object StringStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr
       case RegExpExtract(subject, Literal(pattern: UTF8String, StringType), idx) =>
-        // We need Java escape rules for the regex not Scala ones
-        val regExpr = Literal(StringEscapeUtils.escapeJava(pattern.toString))
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
 
         // Using this Expression to map the Spark-Snowflake function results 1-1
         //  - Spark returns null if any of the inputs is null and empty string ("") if no matches
@@ -108,6 +111,7 @@ private[querygeneration] object StringStatement {
           Literal("")
         )
 
+        // Wrapping in Coalesce to mimic Spark function's functionality in Snowflake
         functionStatement(
           "COALESCE",
           Seq(
@@ -122,8 +126,7 @@ private[querygeneration] object StringStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
       case RegExpExtractAll(subject, Literal(pattern: UTF8String, StringType), idx) =>
-        // We need Java escape rules for the regex not Scala ones
-        val regExpr = Literal(StringEscapeUtils.escapeJava(pattern.toString))
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
 
         functionStatement(
           "REGEXP_SUBSTR_ALL",
@@ -132,10 +135,12 @@ private[querygeneration] object StringStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_replace
-      case e: RegExpReplace =>
+      case RegExpReplace(subject, Literal(pattern: UTF8String, StringType), rep, pos) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(e.subject, e.regexp, e.rep, e.pos).map(convertStatement(_, fields)),
+          Seq(subject, regExpr, rep, pos).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/reverse
@@ -149,10 +154,12 @@ private[querygeneration] object StringStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_like
-      case e: RLike =>
+      case RLike(left, Literal(pattern: UTF8String, StringType)) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
+          Seq(left, regExpr).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/replace
