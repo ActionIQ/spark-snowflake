@@ -1159,8 +1159,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "to_timestamp(s1, 'yyyy-MM-dd')",
       "to_timestamp(s2, 'yyyy-MM-dd hh:mm:ss')",
@@ -1210,8 +1208,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "cast(to_date(t) as string)",
       "cast(to_date(s1, 'yyyy/MM/dd') as string)",
@@ -1254,8 +1250,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "from_unixtime(ts)",
       "from_unixtime(ts, 'yyyy/MM/dd')",
@@ -1322,8 +1316,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "from_utc_timestamp(t, 'America/New_York')",
       "from_utc_timestamp(d, 'Asia/Seoul')",
@@ -1388,8 +1380,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "to_unix_timestamp(t, 'yyyy-MM-dd hh:mm:ss')",
       "to_unix_timestamp(t)",
@@ -1449,8 +1439,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "to_utc_timestamp(t, 'America/New_York')",
       "to_utc_timestamp(t, 'Asia/Seoul')",
@@ -1516,8 +1504,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       .option("dbtable", test_table_date)
       .load()
 
-    // `to_timestamp` without format for strings does a
-    // simple casting which we don't need to test here
     val resultDF = tmpDF.selectExpr(
       "unix_timestamp(t, 'yyyy-MM-dd')",
       "unix_timestamp(d, 'yyyy-MM-dd')",
@@ -1540,6 +1526,66 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |  (
          |    DATE_PART ( 'EPOCH_SECOND' , TO_TIMESTAMP_NTZ ( "SUBQUERY_0"."S2" , 'yyyy/MM/dd' ) )
          |  ) AS "SUBQUERY_1_COL_3"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown unix_seconds") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(t timestamp)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('1970-01-01 00:00:01'), (NULL)"
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("unix_seconds(t)")
+    val expectedResult = Seq(Row(1L), Row(null))
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    DATE_PART ( 'EPOCH_SECOND' , "SUBQUERY_0"."T" )
+         |  ) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown unix_millis") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(t timestamp)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"('1970-01-01 00:00:01'), (NULL)"
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("unix_millis(t)")
+    val expectedResult = Seq(Row(1000L), Row(null))
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    DATE_PART ( 'EPOCH_MILLISECOND' , "SUBQUERY_0"."T" )
+         |  ) AS "SUBQUERY_1_COL_0"
          |FROM (
          |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
