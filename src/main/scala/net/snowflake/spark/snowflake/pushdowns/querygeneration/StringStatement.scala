@@ -3,6 +3,7 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
 import org.apache.commons.lang.StringEscapeUtils
 import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, If, IsNull, Length, Like, Literal, Lower, Or, RLike, RegExpExtract, RegExpExtractAll, RegExpReplace, Reverse, StringInstr, StringLPad, StringRPad, StringReplace, StringTranslate, StringTrim, StringTrimBoth, StringTrimLeft, StringTrimRight, Substring, ToNumber, Upper, Uuid}
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.types.{NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -177,10 +178,19 @@ private[querygeneration] object StringStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_decimal
-      case e: ToNumber =>
+      case e: ToNumber if e.right.foldable =>
+        val fmt = e.right.eval().toString
+        // `errorOnFail` does not matter for the usage of `ToNumberParser` here
+        val numParser = new ToNumberParser(fmt, errorOnFail = false)
+
+        val precision = numParser.parsedDecimalType.precision
+        // In Snowflake cannot be higher that the maximum precision (38) -1
+        val scale = if (numParser.parsedDecimalType.scale > 37) 37 else numParser.parsedDecimalType.scale
+
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
+          (Seq(e.left) ++ Seq(fmt, precision, scale).map(Literal(_)))
+            .map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
