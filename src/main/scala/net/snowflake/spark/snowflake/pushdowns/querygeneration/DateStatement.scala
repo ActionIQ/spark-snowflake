@@ -1,7 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqFromUnixTime, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, GetTimestamp, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqFromUnixTime, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateFormatClass, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, GetTimestamp, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
 import org.apache.spark.sql.types._
 
 /**
@@ -290,16 +290,12 @@ private[querygeneration] object DateStatement {
       -- 2019-09-01 14:50
       */
       case e: AiqDateToString if e.dateFormat.foldable =>
-        val format = sparkDateFmtToSnowflakeDateFmt(e.dateFormat.eval().toString)
-        val dateExpr = ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.timestamp)
-
-        functionStatement(
-          "TO_CHAR",
-          Seq(
-            convertStatement(dateExpr, fields),
-            ConstantString(s"'$format'").toStatement,
-          ),
+        val dateExpr = DateFormatClass(
+          ConvertTimezone(CurrentTimeZone(), e.timezoneId, e.timestamp),
+          e.dateFormat,
         )
+
+        convertStatement(dateExpr, fields)
 
       /*
       --- 2023-09-01 to 2023-09-02
@@ -433,11 +429,18 @@ private[querygeneration] object DateStatement {
       -- 1970-01-01 00:00:00
       */
       case e: AiqFromUnixTime if e.format.foldable =>
-        val dateExpr = ConvertTimezone(CurrentTimeZone(), e.timeZone, e.sec)
+        val dateExpr = DateFormatClass(
+          ConvertTimezone(CurrentTimeZone(), e.timeZone, e.sec),
+          e.format,
+        )
 
+        convertStatement(dateExpr, fields)
+
+      // https://docs.snowflake.com/en/sql-reference/functions/to_char
+      case e: DateFormatClass =>
         functionStatement(
           "TO_CHAR",
-          Seq(convertStatement(dateExpr, fields)) ++ formatToFunctionArg(Some(e.format)),
+          Seq(convertStatement(e.left, fields)) ++ formatToFunctionArg(Some(e.right)),
         )
 
       case e: ConvertTimezone =>
@@ -483,16 +486,16 @@ private[querygeneration] object DateStatement {
       // https://docs.snowflake.com/en/developer-guide/snowpark/reference/python/1.12.0/api/snowflake.snowpark.functions.from_unixtime
       // scalastyle:on line.size.limit
       case e: FromUnixTime if e.format.foldable =>
-        val dateExpr = ConvertTimezone(
-          CurrentTimeZone(),
-          Literal("UTC"),
-          Cast(Multiply(e.sec, Literal(1000L)), LongType), // msExpr
+        val dateExpr = DateFormatClass(
+          ConvertTimezone(
+            CurrentTimeZone(),
+            Literal("UTC"),
+            Cast(Multiply(e.sec, Literal(1000L)), LongType), // msExpr
+          ),
+          e.format,
         )
 
-        functionStatement(
-          "TO_CHAR",
-          Seq(convertStatement(dateExpr, fields)) ++ formatToFunctionArg(Some(e.format)),
-        )
+        convertStatement(dateExpr, fields)
 
       case e: FromUTCTimestamp =>
         convertStatement(ConvertTimezone(Literal("UTC"), e.right, e.left), fields)
