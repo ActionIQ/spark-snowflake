@@ -1241,6 +1241,136 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown from_unixtime") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(ts bigint)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"(1553890107), (NULL)"
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    // `to_timestamp` without format for strings does a
+    // simple casting which we don't need to test here
+    val resultDF = tmpDF.selectExpr(
+      "from_unixtime(ts)",
+      "from_unixtime(ts, 'yyyy/MM/dd')",
+      "from_unixtime(ts, 'yyyy-MM-dd')",
+    )
+    val expectedResult = Seq(
+      Row("2019-03-29 20:08:27", "2019/03/29", "2019-03-29"),
+      Row(null, null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    TO_CHAR (
+         |      CONVERT_TIMEZONE (
+         |        'UTC' ,
+         |        CAST ( CAST ( ( CAST ( "SUBQUERY_0"."TS" AS NUMBER ) * 1000 ) AS NUMBER ) AS VARCHAR )
+         |      ) ,
+         |      'yyyy-MM-dd HH24:mi:SS'
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    TO_CHAR (
+         |      CONVERT_TIMEZONE (
+         |        'UTC' ,
+         |        CAST ( CAST ( ( CAST ( "SUBQUERY_0"."TS" AS NUMBER ) * 1000 ) AS NUMBER ) AS VARCHAR )
+         |      ) ,
+         |      'yyyy/MM/dd'
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1" ,
+         |  (
+         |    TO_CHAR (
+         |      CONVERT_TIMEZONE (
+         |        'UTC' ,
+         |        CAST ( CAST ( ( CAST ( "SUBQUERY_0"."TS" AS NUMBER ) * 1000 ) AS NUMBER ) AS VARCHAR )
+         |      ) ,
+         |      'yyyy-MM-dd'
+         |    )
+         |  ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown from_utc_timestamp") {
+    jdbcUpdate(s"create or replace table $test_table_date " +
+      s"(t timestamp, d date, s string)")
+    jdbcUpdate(s"insert into $test_table_date values " +
+      s"""
+         |('2019-08-12 01:00:00', '2019-08-12', '2019-08-12'),
+         |(NULL, NULL, NULL)
+         |"""
+        .stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_date)
+      .load()
+
+    // `to_timestamp` without format for strings does a
+    // simple casting which we don't need to test here
+    val resultDF = tmpDF.selectExpr(
+      "from_utc_timestamp(t, 'America/New_York')",
+      "from_utc_timestamp(d, 'Asia/Seoul')",
+      "from_utc_timestamp(s, 'America/New_York')",
+    )
+    val expectedResult = Seq(
+      Row(
+        Timestamp.valueOf("2019-08-11 21:00:00"),
+        Timestamp.valueOf("2019-08-12 09:00:00"),
+        Timestamp.valueOf("2019-08-11 20:00:00"),
+      ),
+      Row(null, null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    CONVERT_TIMEZONE (
+         |      'UTC' ,
+         |      'America/New_York' ,
+         |      CAST ( "SUBQUERY_0"."T" AS VARCHAR )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    CONVERT_TIMEZONE (
+         |      'UTC' ,
+         |      'Asia/Seoul' ,
+         |      CAST ( CAST ( "SUBQUERY_0"."D" AS TIMESTAMP ) AS VARCHAR )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1" ,
+         |  (
+         |    CONVERT_TIMEZONE (
+         |      'UTC' ,
+         |      'America/New_York' ,
+         |      CAST ( CAST ( "SUBQUERY_0"."S" AS TIMESTAMP ) AS VARCHAR )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_2"
+         |FROM (
+         |  SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   // Aggregate-style
 
   test("AIQ test pushdown approx_count_dist") {

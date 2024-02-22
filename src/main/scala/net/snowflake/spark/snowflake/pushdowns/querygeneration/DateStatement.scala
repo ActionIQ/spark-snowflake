@@ -461,17 +461,20 @@ private[querygeneration] object DateStatement {
       // scalastyle:off line.size.limit
       // https://docs.snowflake.com/en/developer-guide/snowpark/reference/python/1.12.0/api/snowflake.snowpark.functions.from_unixtime
       // scalastyle:on line.size.limit
-      case FromUnixTime(sec, formatStr, _) =>
-        val dateExpr = ParseToTimestamp(
-          Cast(Multiply(sec, Literal(1000L)), LongType), // msExpr
-          Some(formatStr),
-          TimestampType
+      case e: FromUnixTime if e.format.foldable =>
+        val dateExpr = ConvertTimezone(
+          CurrentTimeZone(),
+          Literal("UTC"),
+          Cast(Multiply(e.sec, Literal(1000L)), LongType), // msExpr
         )
 
-        convertStatement(dateExpr, fields)
+        functionStatement(
+          "TO_CHAR",
+          Seq(convertStatement(dateExpr, fields)) ++ formatToFunctionArg(Some(e.format)),
+        )
 
-      case FromUTCTimestamp(left, right) =>
-        convertStatement(ConvertTimezone(Literal("UTC"), right, left), fields)
+      case e: FromUTCTimestamp =>
+        convertStatement(ConvertTimezone(Literal("UTC"), e.right, e.left), fields)
 
       case ToUnixTimestamp(timeExp, formatStr, _, _) =>
         val dateExpr = UnixSeconds(
