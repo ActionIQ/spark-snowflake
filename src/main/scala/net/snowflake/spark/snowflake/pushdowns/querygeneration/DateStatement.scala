@@ -1,71 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Add,
-  AddMonths,
-  AiqDateToString,
-  AiqDayDiff,
-  AiqDayOfTheWeek,
-  AiqDayStart,
-  AiqFromUnixTime,
-  AiqStringToDate,
-  AiqWeekDiff,
-  Attribute,
-  Cast,
-  ConvertTimezone,
-  CurrentTimeZone,
-  DateAdd,
-  DateDiff,
-  DateSub,
-  DayOfMonth,
-  DayOfWeek,
-  DayOfYear,
-  Decode,
-  Divide,
-  Expression,
-  Extract,
-  Floor,
-  FromUTCTimestamp,
-  FromUnixTime,
-  GetTimestamp,
-  Hour,
-  LastDay,
-  Literal,
-  MakeDate,
-  MakeTimestamp,
-  Minute,
-  Month,
-  MonthsBetween,
-  Multiply,
-  NextDay,
-  ParseToDate,
-  ParseToTimestamp,
-  Quarter,
-  Remainder,
-  Second,
-  Subtract,
-  ToUTCTimestamp,
-  ToUnixTimestamp,
-  TruncDate,
-  TruncTimestamp,
-  UnixMillis,
-  UnixSeconds,
-  UnixTimestamp,
-  WeekDay,
-  WeekOfYear,
-  Year
-}
-import org.apache.spark.sql.types.{
-  IntegerType,
-  LongType,
-  NullType,
-  StringType,
-  TimestampType
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{Add, AddMonths, AiqDateToString, AiqDayDiff, AiqDayOfTheWeek, AiqDayStart, AiqFromUnixTime, AiqStringToDate, AiqWeekDiff, Attribute, Cast, ConvertTimezone, CurrentTimeZone, DateAdd, DateDiff, DateSub, DayOfMonth, DayOfWeek, DayOfYear, Decode, Divide, Expression, Extract, Floor, FromUTCTimestamp, FromUnixTime, GetTimestamp, Hour, LastDay, Literal, MakeDate, MakeTimestamp, Minute, Month, MonthsBetween, Multiply, NextDay, ParseToDate, ParseToTimestamp, Quarter, Remainder, Second, Subtract, ToUTCTimestamp, ToUnixTimestamp, TruncDate, TruncTimestamp, UnixMillis, UnixSeconds, UnixTimestamp, WeekDay, WeekOfYear, Year}
+import org.apache.spark.sql.types._
 
 /**
  * Extractor for date-style expressions.

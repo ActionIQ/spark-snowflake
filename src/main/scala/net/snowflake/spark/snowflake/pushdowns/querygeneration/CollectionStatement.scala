@@ -1,34 +1,10 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
+import org.apache.spark.sql.types.ArrayType
 
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  ArrayContains,
-  ArrayDistinct,
-  ArrayExcept,
-  ArrayIntersect,
-  ArrayJoin,
-  ArrayMax,
-  ArrayMin,
-  ArrayPosition,
-  ArrayRemove,
-  ArrayUnion,
-  ArraysOverlap,
-  Attribute,
-  Concat,
-  CreateArray,
-  CreateNamedStruct,
-  Expression,
-  Flatten,
-  JsonToStructs,
-  Literal,
-  Size,
-  Slice,
-  SortArray,
-  StructsToJson
-}
-import org.apache.spark.sql.types.ArrayType
 
 /**
  * Extractor for collection-style expressions.

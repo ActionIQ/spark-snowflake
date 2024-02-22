@@ -1,41 +1,10 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Ascii,
-  Attribute,
-  Cast,
-  Concat,
-  ConcatWs,
-  Expression,
-  FormatNumber,
-  Length,
-  Like,
-  Literal,
-  Lower,
-  RLike,
-  RegExpExtract,
-  RegExpExtractAll,
-  RegExpReplace,
-  Reverse,
-  StringInstr,
-  StringLPad,
-  StringRPad,
-  StringReplace,
-  StringTranslate,
-  StringTrim,
-  StringTrimBoth,
-  StringTrimLeft,
-  StringTrimRight,
-  Substring,
-  ToNumber,
-  Upper,
-  Uuid
-}
-import org.apache.spark.sql.types.StringType
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+import org.apache.commons.lang.StringEscapeUtils
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, If, IsNull, Length, Like, Literal, Lower, Or, RLike, RegExpExtract, RegExpExtractAll, RegExpReplace, Reverse, StringInstr, StringLPad, StringRPad, StringReplace, StringTranslate, StringTrim, StringTrimBoth, StringTrimLeft, StringTrimRight, Substring, ToNumber, Upper, Uuid}
+import org.apache.spark.sql.types.{NullType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringStatement {
@@ -43,9 +12,8 @@ private[querygeneration] object StringStatement {
   // The default escape character comes from the constructor of Like class.
   private val DEFAULT_LIKE_ESCAPE_CHAR: Char = '\\'
 
-  // RegExpExtract and RegExpExtractAll Snowflake Defaults
-  private val Seq(position, occurrence, regex_parameters) =
-    Seq.fill(2)(Literal(1)) ++ Seq(Literal("c"))
+  // RegExpExtract and RegExpExtractAll Snowflake Defaults non-existent in Spark
+  private val Seq(position, occurrence, regex_parameters) = Seq.fill(2)(Literal(1)) ++ Seq(Literal("c"))
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -127,11 +95,29 @@ private[querygeneration] object StringStatement {
         ) + escapeClause
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr
-      case e: RegExpExtract =>
+      case RegExpExtract(subject, Literal(pattern: UTF8String, StringType), idx) =>
+        // We need Java escape rules for the regex not Scala ones
+        val regExpr = Literal(StringEscapeUtils.escapeJava(pattern.toString))
+
+        // Using this Expression to map the Spark-Snowflake function results 1-1
+        //  - Spark returns null if any of the inputs is null and empty string ("") if no matches
+        //  - Snowflake returns null if any of the inputs is null AND for no matches
+        val nullSafeExpr = If(
+          Or(Or(IsNull(subject), IsNull(regExpr)), IsNull(idx)),
+          Literal.default(NullType),
+          Literal("")
+        )
+
         functionStatement(
-          "REGEXP_SUBSTR",
-          Seq(e.subject, e.regexp, position, occurrence, regex_parameters, e.idx)
-            .map(convertStatement(_, fields)),
+          "COALESCE",
+          Seq(
+            functionStatement(
+              "REGEXP_SUBSTR",
+              Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
+                .map(convertStatement(_, fields)),
+            ),
+            convertStatement(nullSafeExpr, fields),
+          ),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all

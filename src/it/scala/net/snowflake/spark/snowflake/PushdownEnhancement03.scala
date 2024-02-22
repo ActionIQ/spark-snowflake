@@ -2231,46 +2231,6 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
     )
   }
 
-  test("AIQ test pushdown reverse") {
-    jdbcUpdate(s"create or replace table $test_table_string " +
-      s"(s string)")
-    jdbcUpdate(s"insert into $test_table_string values " +
-      s"""
-         |('snowflake'),
-         |('spark'),
-         |(''),
-         |(NULL)
-         |""".stripMargin.linesIterator.mkString(" ").trim
-    )
-
-    val tmpDF = sparkSession.read
-      .format(SNOWFLAKE_SOURCE_NAME)
-      .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_string)
-      .load()
-
-    val resultDF = tmpDF.selectExpr("reverse(s)", "reverse(concat(s,s))")
-    val expectedResult = Seq(
-      Row("ekalfwons", "ekalfwonsekalfwons"),
-      Row("kraps", "krapskraps"),
-      Row("", ""),
-      Row(null, null),
-    )
-
-    testPushdown(
-      s"""
-         |SELECT
-         |  ( REVERSE ( "SUBQUERY_0"."S" ) ) AS "SUBQUERY_1_COL_0" ,
-         |  ( REVERSE ( CONCAT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ) ) AS "SUBQUERY_1_COL_1"
-         |FROM (
-         |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
-         |) AS "SUBQUERY_0"
-         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-      resultDF,
-      expectedResult
-    )
-  }
-
   test("AIQ test pushdown concat_ws") {
     jdbcUpdate(s"create or replace table $test_table_string " +
       s"(s string)")
@@ -2363,6 +2323,135 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |      )
          |    )
          |  ) AS "SUBQUERY_1_COL_6"
+         |FROM (
+         |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+  }
+
+  test("AIQ test pushdown regexp_extract") {
+    jdbcUpdate(s"create or replace table $test_table_string " +
+      s"(s string)")
+    jdbcUpdate(s"insert into $test_table_string values " +
+      s"""
+         |('snowflake-snowflake'),
+         |('spark-spark'),
+         |(''),
+         |(NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_string)
+      .load()
+
+    val resultDF = tmpDF.selectExpr(
+      "regexp_extract(s, '(\\\\w+)-(\\\\w+)', 1)",
+      "regexp_extract(s, NULL, 1)",
+      "regexp_extract(s, '(\\\\w+)-(\\\\w+)', NULL)",
+      "regexp_extract(concat(s,s), '(\\\\w+)-(\\\\w+)', 1)",
+    )
+    val expectedResult = Seq(
+      Row("snowflake", null, null, "snowflake"),
+      Row("spark", null, null, "spark"),
+      Row("", null, null, ""),
+      Row(null, null, null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  (
+         |    COALESCE (
+         |      REGEXP_SUBSTR (
+         |        "SUBQUERY_0"."S" ,
+         |        '(\\\\w+)-(\\\\w+)' ,
+         |        1 ,
+         |        1 ,
+         |        'c' ,
+         |        1
+         |      ) ,
+         |      IFF (
+         |        (
+         |          ( ( "SUBQUERY_0"."S" IS NULL ) OR ( '(\\\\w+)-(\\\\w+)' IS NULL ) ) OR
+         |          ( 1 IS NULL )
+         |        ) ,
+         |        NULL ,
+         |        ''
+         |      )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_0" ,
+         |  ( NULL ) AS "SUBQUERY_1_COL_1" ,
+         |  ( NULL ) AS "SUBQUERY_1_COL_2" ,
+         |  (
+         |    COALESCE (
+         |      REGEXP_SUBSTR (
+         |        CONCAT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ,
+         |        '(\\\\w+)-(\\\\w+)' ,
+         |        1 ,
+         |        1 ,
+         |        'c' ,
+         |        1
+         |      ) ,
+         |      IFF (
+         |        (
+         |          (
+         |            (
+         |              CONCAT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) IS NULL ) OR
+         |              ( '(\\\\w+)-(\\\\w+)' IS NULL
+         |            )
+         |          ) OR ( 1 IS NULL )
+         |        ) ,
+         |        NULL ,
+         |        ''
+         |      )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_3"
+         |FROM (
+         |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult
+    )
+  }
+
+  test("AIQ test pushdown reverse") {
+    jdbcUpdate(s"create or replace table $test_table_string " +
+      s"(s string)")
+    jdbcUpdate(s"insert into $test_table_string values " +
+      s"""
+         |('snowflake'),
+         |('spark'),
+         |(''),
+         |(NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_string)
+      .load()
+
+    val resultDF = tmpDF.selectExpr("reverse(s)", "reverse(concat(s,s))")
+    val expectedResult = Seq(
+      Row("ekalfwons", "ekalfwonsekalfwons"),
+      Row("kraps", "krapskraps"),
+      Row("", ""),
+      Row(null, null),
+    )
+
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( REVERSE ( "SUBQUERY_0"."S" ) ) AS "SUBQUERY_1_COL_0" ,
+         |  ( REVERSE ( CONCAT ( "SUBQUERY_0"."S" , "SUBQUERY_0"."S" ) ) ) AS "SUBQUERY_1_COL_1"
          |FROM (
          |  SELECT * FROM ( $test_table_string ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"

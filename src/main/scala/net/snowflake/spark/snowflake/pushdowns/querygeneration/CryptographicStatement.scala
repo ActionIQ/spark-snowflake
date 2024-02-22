@@ -1,18 +1,10 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Expression, Md5, Sha1, Sha2, XxHash64}
+import org.apache.spark.sql.types.{BinaryType, StringType}
 
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  Cast,
-  Expression,
-  Md5,
-  Sha1,
-  Sha2,
-  XxHash64
-}
-import org.apache.spark.sql.types.{BinaryType, StringType}
 
 /**
  * Extractor for cryptographic-style expressions.
