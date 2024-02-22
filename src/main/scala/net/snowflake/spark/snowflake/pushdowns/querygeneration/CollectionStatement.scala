@@ -1,6 +1,6 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake._
+import net.snowflake.spark.snowflake.SnowflakeSQLStatement
 import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
 import org.apache.spark.sql.types.ArrayType
 
@@ -32,154 +32,154 @@ private[querygeneration] object CollectionStatement {
       // ARRAY
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_contains
-      case ArrayContains(left, right) =>
+      case e: ArrayContains =>
         functionStatement(
           expr.prettyName.toUpperCase,
           // arguments are in reverse order in Snowflake so exchanging here
-          Seq(right, left).map(convertStatement(_, fields)),
+          Seq(e.right, e.left).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_distinct
-      case ArrayDistinct(child) =>
+      case e: ArrayDistinct =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(child, fields)),
+          Seq(convertStatement(e.child, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_except
-      case ArrayExcept(left, right) =>
+      case e: ArrayExcept =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_intersection
-      case ArrayIntersect(left, right) =>
+      case e: ArrayIntersect =>
         functionStatement(
           "ARRAY_INTERSECTION",
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_to_string
-      case ArrayJoin(array, delimiter, _) =>
+      case e: ArrayJoin =>
         functionStatement(
           "ARRAY_TO_STRING",
-          Seq(array, delimiter).map(convertStatement(_, fields)),
+          Seq(e.array, e.delimiter).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_max
-      case ArrayMax(child) =>
+      case e: ArrayMax =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(child, fields)),
+          Seq(convertStatement(e.child, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_min
-      case ArrayMin(child) =>
+      case e: ArrayMin =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(child, fields)),
+          Seq(convertStatement(e.child, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_position
-      case ArrayPosition(left, right) =>
+      case e: ArrayPosition =>
         functionStatement(
           expr.prettyName.toUpperCase,
           // arguments are in reverse order in Snowflake so exchanging here
-          Seq(right, left).map(convertStatement(_, fields)),
+          Seq(e.right, e.left).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_remove
-      case ArrayRemove(left, right) =>
+      case e: ArrayRemove =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
-      case ArrayUnion(left, right) =>
+      case e: ArrayUnion =>
         // we need distinct to map 1-1 with the Spark implementation that returns an
         // array of the elements in the union of array1 and array2 without duplicates
-        convertStatement(ArrayDistinct(Concat(Seq(left, right))), fields)
+        convertStatement(ArrayDistinct(Concat(Seq(e.left, e.right))), fields)
 
       // https://docs.snowflake.com/en/sql-reference/functions/arrays_overlap
-      case ArraysOverlap(left, right) =>
+      case e: ArraysOverlap =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_cat
-      case Concat(children)
-        if children.map(_.dataType.isInstanceOf[ArrayType]).forall(identity) =>
+      case e: Concat
+        if e.children.map(_.dataType.isInstanceOf[ArrayType]).forall(identity) =>
         functionStatement(
           "ARRAY_CAT",
-          Seq(convertStatements(fields, children: _*)),
+          Seq(convertStatements(fields, e.children: _*)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_construct
-      case CreateArray(children, _) =>
+      case e: CreateArray =>
         functionStatement(
           "ARRAY_CONSTRUCT",
-          Seq(convertStatements(fields, children: _*)),
+          Seq(convertStatements(fields, e.children: _*)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
-      case Flatten(child) =>
+      case e: Flatten =>
         functionStatement(
           "ARRAY_FLATTEN",
-          Seq(convertStatement(child, fields)),
+          Seq(convertStatement(e.child, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_size
-      case Size(child, _) =>
-        child.dataType match {
+      case e: Size =>
+        e.child.dataType match {
           case _: ArrayType =>
             functionStatement(
               "ARRAY_SIZE",
-              Seq(convertStatement(child, fields)),
+              Seq(convertStatement(e.child, fields)),
             )
           case _ => null
         }
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_slice
-      case Slice(x, start, length) =>
+      case e: Slice =>
         functionStatement(
           "ARRAY_SLICE",
-          Seq(x, start, length).map(convertStatement(_, fields)),
+          Seq(e.x, e.start, e.length).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_sort
-      case SortArray(base, ascendingOrder) =>
+      case e: SortArray =>
         // setting `nulls_first` to always TRUE to mimic Spark's behavior
         val nullsFirst = Literal(true)
         functionStatement(
           "ARRAY_SORT",
-          Seq(base, ascendingOrder, nullsFirst).map(convertStatement(_, fields)),
+          Seq(e.base, e.ascendingOrder, nullsFirst).map(convertStatement(_, fields)),
         )
 
       // JSON
 
       // https://docs.snowflake.com/en/sql-reference/functions/parse_json
-      case JsonToStructs(_, _, child, _) =>
+      case e: JsonToStructs =>
         functionStatement(
           "PARSE_JSON",
-          Seq(child).map(convertStatement(_, fields)),
+          Seq(e.child).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_json
-      case StructsToJson(_, child, _) =>
+      case e: StructsToJson =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(child).map(convertStatement(_, fields)),
+          Seq(e.child).map(convertStatement(_, fields)),
         )
 
       // STRUCT
 
       // https://docs.snowflake.com/en/sql-reference/functions/object_agg
-      case CreateNamedStruct(children) =>
+      case e: CreateNamedStruct =>
         functionStatement(
           "OBJECT_AGG",
-          Seq(convertStatements(fields, children: _*)),
+          Seq(convertStatements(fields, e.children: _*)),
         )
 
       case _ => null
