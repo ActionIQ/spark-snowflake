@@ -43,6 +43,10 @@ private[querygeneration] object StringStatement {
   // The default escape character comes from the constructor of Like class.
   private val DEFAULT_LIKE_ESCAPE_CHAR: Char = '\\'
 
+  // RegExpExtract and RegExpExtractAll Snowflake Defaults
+  private val Seq(position, occurrence, regex_parameters) =
+    Seq.fill(2)(Literal(1)) ++ Seq(Literal("c"))
+
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
     * be matched and the fields that define the valid fields in the current expression
@@ -123,74 +127,64 @@ private[querygeneration] object StringStatement {
         ) + escapeClause
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr
-      case RegExpExtract(subject, regexp, idx) =>
-        val Seq(position, occurrence) = Seq.fill(2)(Literal(1))
-        val regex_parameters = Literal("c")
-
+      case e: RegExpExtract =>
         functionStatement(
           "REGEXP_SUBSTR",
-          Seq(subject, regexp, position, occurrence, regex_parameters, idx)
+          Seq(e.subject, e.regexp, position, occurrence, regex_parameters, e.idx)
             .map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
-      case RegExpExtractAll(subject, regexp, idx) =>
-        val Seq(position, occurrence) = Seq.fill(2)(Literal(1))
-        val regex_parameters = Literal("c")
-
+      case e: RegExpExtractAll =>
         functionStatement(
           "REGEXP_SUBSTR_ALL",
-          Seq(subject, regexp, position, occurrence, regex_parameters, idx)
+          Seq(e.subject, e.regexp, position, occurrence, regex_parameters, e.idx)
             .map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_replace
-      case RegExpReplace(subject, regexp, rep, pos) =>
+      case e: RegExpReplace =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(subject, regexp, rep, pos).map(convertStatement(_, fields)),
+          Seq(e.subject, e.regexp, e.rep, e.pos).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/reverse
       // Reverse in Snowflake only supports StringType and DateType.
       // Spark only supports StringType and ArrayType, thus we only
       // implement for StringType
-      case Reverse(child) =>
-        child.dataType match {
-          case _: StringType =>
-            functionStatement(
-              expr.prettyName.toUpperCase,
-              Seq(convertStatement(child, fields)),
-            )
-          case _ => null
-        }
-
-      // https://docs.snowflake.com/en/sql-reference/functions/regexp_like
-      case RLike(left, right) =>
+      case e: Reverse if e.child.dataType.isInstanceOf[StringType] =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(convertStatement(e.child, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_like
+      case e: RLike =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/replace
-      case StringReplace(srcExpr, searchExpr, replaceExpr) =>
+      case e: StringReplace =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(srcExpr, searchExpr, replaceExpr).map(convertStatement(_, fields)),
+          Seq(e.srcExpr, e.searchExpr, e.replaceExpr).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/trim
-      case StringTrimBoth(srcStr, trimStrOpt, _) =>
+      case e: StringTrimBoth =>
         functionStatement(
           "TRIM",
-          (Seq(srcStr) ++ optionalExprToFuncArg(trimStrOpt)).map(convertStatement(_, fields)),
+          (Seq(e.srcStr) ++ optionalExprToFuncArg(e.trimStr)).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/to_decimal
-      case ToNumber(left, right) =>
+      case e: ToNumber =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(left, right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(convertStatement(_, fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
