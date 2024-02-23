@@ -119,10 +119,17 @@ package object querygeneration {
     inputs: Seq[Expression],
     default: Expression,
   ): Expression = {
-    val firstInput = inputs.head
-    val inputNullCheckExpr = inputs.drop(1).foldLeft(firstInput) {
-      (currentExpr, newExpr) => Or(IsNull(currentExpr), IsNull(newExpr))
-    }
+    val isNullMappedInputs = inputs.map(IsNull)
+
+    val inputNullCheckExpr = if (isNullMappedInputs.size > 1) {
+      val firstInput = isNullMappedInputs.head
+      val secondInput = isNullMappedInputs.drop(1).head
+
+      isNullMappedInputs.drop(2).foldLeft(Or(firstInput, secondInput)) {
+        (currentExpr, newExpr) => Or(currentExpr, newExpr)
+      }
+    } else { isNullMappedInputs.head }
+
     If(inputNullCheckExpr, Literal.default(NullType), default)
   }
 
