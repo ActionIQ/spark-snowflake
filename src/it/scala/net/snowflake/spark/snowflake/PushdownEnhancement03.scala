@@ -22,8 +22,6 @@ import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 
-import java.sql.Timestamp
-
 // scalastyle:off println
 class PushdownEnhancement03 extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()

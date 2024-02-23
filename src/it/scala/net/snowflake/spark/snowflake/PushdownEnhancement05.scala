@@ -19,9 +19,8 @@ package net.snowflake.spark.snowflake
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.snowflake.SFQueryTest
 
-import java.sql.Timestamp
 import java.util.TimeZone
 
 // scalastyle:off println
@@ -94,7 +93,7 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
       Array[String](),
     ).map(Row(_))
 
-    testPushdown(
+    testPushdownSql(
       s"""
          |SELECT (
          |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" )
@@ -104,8 +103,8 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFStr,
-      expectedResultStr,
     )
+    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
 
     val resultDFInt = tmpDF.selectExpr("array(i1, i2)")
     val expectedResultInt = Seq(
@@ -118,7 +117,7 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
       Seq[Int](),
     ).map { r => Row(r.map(BigDecimal(_)).toArray) }
 
-    testPushdown(
+    testPushdownSql(
       s"""
          |SELECT (
          |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."I1" , "SUBQUERY_0"."I2" )
@@ -128,8 +127,8 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFInt,
-      expectedResultInt,
     )
+    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
   }
 
   //  test("AIQ test pushdown size") {
