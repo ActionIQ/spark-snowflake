@@ -1,10 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+
 import org.apache.commons.lang.StringEscapeUtils
-import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, If, IsNull, Length, Like, Literal, Lower, Or, RLike, RegExpExtract, RegExpExtractAll, RegExpReplace, Reverse, StringInstr, StringLPad, StringRPad, StringReplace, StringTranslate, StringTrim, StringTrimBoth, StringTrimLeft, StringTrimRight, Substring, ToNumber, Upper, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, Length, Like, Literal, Lower, RLike, RegExpExtract, RegExpExtractAll, RegExpReplace, Reverse, StringInstr, StringLPad, StringRPad, StringReplace, StringTranslate, StringTrim, StringTrimBoth, StringTrimLeft, StringTrimRight, Substring, ToNumber, Upper, Uuid}
 import org.apache.spark.sql.catalyst.util.ToNumberParser
-import org.apache.spark.sql.types.{NullType, StringType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractor for boolean expressions (return true or false). */
@@ -103,15 +104,6 @@ private[querygeneration] object StringStatement {
       case RegExpExtract(subject, Literal(pattern: UTF8String, StringType), idx) =>
         val regExpr = patternStrToJavaEscapedRegExpr(pattern)
 
-        // Using this Expression to map the Spark-Snowflake function results 1-1
-        //  - Spark returns null if any of the inputs is null and empty string ("") if no matches
-        //  - Snowflake returns null if any of the inputs is null AND for no matches
-        val nullSafeExpr = If(
-          Or(Or(IsNull(subject), IsNull(regExpr)), IsNull(idx)),
-          Literal.default(NullType),
-          Literal("")
-        )
-
         // Wrapping in Coalesce to mimic Spark function's functionality in Snowflake
         functionStatement(
           "COALESCE",
@@ -121,7 +113,7 @@ private[querygeneration] object StringStatement {
               Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
                 .map(convertStatement(_, fields)),
             ),
-            convertStatement(nullSafeExpr, fields),
+            convertStatement(nullSafeExpr(Seq(subject, regExpr, idx), Literal("")), fields),
           ),
         )
 

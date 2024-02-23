@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.{Attribute, DenseRank, Expression, PercentRank, Rank, RowNumber, WindowExpression, WindowSpecDefinition}
 

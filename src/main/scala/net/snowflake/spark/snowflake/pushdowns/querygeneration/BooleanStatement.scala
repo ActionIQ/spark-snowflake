@@ -1,6 +1,7 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Contains, EndsWith, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Not, StartsWith}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String

@@ -1,8 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
-import org.apache.spark.sql.types.ArrayType
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, If, IsNull, JsonToStructs, Literal, Or, Size, Slice, SortArray, StructsToJson}
+import org.apache.spark.sql.types.{ArrayType, NullType}
 
 import scala.language.postfixOps
 
@@ -10,6 +10,11 @@ import scala.language.postfixOps
  * Extractor for collection-style expressions.
  */
 private[querygeneration] object CollectionStatement {
+
+  private def castExpressionToVariant(
+    expr: Expression,
+    fields: Seq[Attribute],
+  ): SnowflakeSQLStatement = convertStatement(expr, fields) + "::VARIANT"
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
    * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -38,7 +43,7 @@ private[querygeneration] object CollectionStatement {
           // arguments are in reverse order in Snowflake so exchanging here
           Seq(
             // value expression must evaluate to variant
-            convertStatement(e.right, fields) + "::VARIANT",
+            castExpressionToVariant(e.right, fields),
             convertStatement(e.left, fields)
           ),
         )
@@ -89,10 +94,21 @@ private[querygeneration] object CollectionStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_position
       case e: ArrayPosition =>
+        // Wrapping in Coalesce to mimic Spark function's functionality in Snowflake
         functionStatement(
-          expr.prettyName.toUpperCase,
-          // arguments are in reverse order in Snowflake so exchanging here
-          Seq(e.right, e.left).map(convertStatement(_, fields)),
+          "COALESCE",
+          Seq(
+            functionStatement(
+              expr.prettyName.toUpperCase,
+              // arguments are in reverse order in Snowflake so exchanging here
+              Seq(
+                // value expression must evaluate to variant
+                castExpressionToVariant(e.right, fields),
+                convertStatement(e.left, fields)
+              ),
+            ),
+            convertStatement(nullSafeExpr(e.children, Literal(0)), fields),
+          ),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_remove

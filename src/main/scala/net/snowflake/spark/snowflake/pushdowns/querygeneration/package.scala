@@ -1,18 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  EmptySnowflakeSQLStatement,
-  SnowflakeSQLStatement
-}
+import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, SnowflakeSQLStatement}
+
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Expression,
-  NamedExpression
-}
-import org.apache.spark.sql.types.MetadataBuilder
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, If, IsNull, Literal, NamedExpression, Or}
+import org.apache.spark.sql.types.{MetadataBuilder, NullType}
 import org.slf4j.LoggerFactory
 
 /** Package-level static methods and variable constants. These includes helper functions for
@@ -117,6 +110,20 @@ package object querygeneration {
       case UnsupportedStatement(stmt) => stmt
       // UnsupportedStatement must be the last CASE
     }
+  }
+
+  // Using this Expression to map the Spark-Snowflake function results 1-1
+  //  - Spark returns null if any of the inputs is null and a default value if no matches
+  //  - Snowflake returns null if any of the inputs is null AND for no matches
+  private[querygeneration] final def nullSafeExpr(
+    inputs: Seq[Expression],
+    default: Expression,
+  ): Expression = {
+    val firstInput = inputs.head
+    val inputNullCheckExpr = inputs.drop(1).foldLeft(firstInput) {
+      (currentExpr, newExpr) => Or(IsNull(currentExpr), IsNull(newExpr))
+    }
+    If(inputNullCheckExpr, Literal.default(NullType), default)
   }
 
   private[querygeneration] final def convertStatements(
