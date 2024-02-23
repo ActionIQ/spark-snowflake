@@ -133,6 +133,18 @@ package object querygeneration {
     If(inputNullCheckExpr, Literal.default(NullType), default)
   }
 
+  // Same as above, using this Statement to map the Spark-Snowflake function results 1-1
+  private[querygeneration] final def nullSafeStmt(
+    statement: SnowflakeSQLStatement,
+    defaultStmt: SnowflakeSQLStatement,
+  ): SnowflakeSQLStatement = {
+    // Wrapping statement in Coalesce to mimic Spark function's functionality in Snowflake
+    functionStatement(
+      "COALESCE",
+      Seq(statement, defaultStmt),
+    )
+  }
+
   private[querygeneration] final def convertStatements(
     fields: Seq[Attribute],
     expressions: Expression*

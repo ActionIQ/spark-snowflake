@@ -1,8 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+
 import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, If, IsNull, JsonToStructs, Literal, Or, Size, Slice, SortArray, StructsToJson}
-import org.apache.spark.sql.types.{ArrayType, NullType}
+import org.apache.spark.sql.types.ArrayType
 
 import scala.language.postfixOps
 
@@ -94,21 +95,22 @@ private[querygeneration] object CollectionStatement {
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_position
       case e: ArrayPosition =>
-        // Wrapping in Coalesce to mimic Spark function's functionality in Snowflake
-        functionStatement(
-          "COALESCE",
-          Seq(
-            functionStatement(
-              expr.prettyName.toUpperCase,
-              // arguments are in reverse order in Snowflake so exchanging here
-              Seq(
-                // value expression must evaluate to variant
-                castExpressionToVariant(e.right, fields),
-                convertStatement(e.left, fields)
-              ),
+        val arrayPositionStmt = blockStatement(
+          functionStatement(
+            expr.prettyName.toUpperCase,
+            // arguments are in reverse order in Snowflake so exchanging here
+            Seq(
+              // value expression must evaluate to variant
+              castExpressionToVariant(e.right, fields),
+              convertStatement(e.left, fields)
             ),
-            convertStatement(nullSafeExpr(e.children, Literal(0)), fields),
-          ),
+          // Spark function is (1-based) indexed
+          ) + ConstantString("+ 1")
+        )
+
+        nullSafeStmt(
+          arrayPositionStmt,
+          convertStatement(nullSafeExpr(e.children, Literal(0)), fields),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_remove

@@ -564,8 +564,8 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
         expr("array_position(i2_agg, NULL)").alias("arr_position_i2"),
       )
     val expectedResult = Seq(
-      Row(BigDecimal(1), 1, 0, 1, 0, null),
-      Row(BigDecimal(2), 0, 0, 0, 1, null),
+      Row(BigDecimal(1), 2, 0, 2, 0, null),
+      Row(BigDecimal(2), 0, 1, 0, 2, null),
     )
     testPushdown(
       s"""
@@ -573,9 +573,11 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
          |  (
          |    COALESCE (
-         |      ARRAY_POSITION (
-         |        'hello2' ::VARIANT ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true )
+         |      (
+         |        ARRAY_POSITION (
+         |          'hello2' ::VARIANT ,
+         |          ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true )
+         |        ) + 1
          |      ) ,
          |      IFF (
          |        ( ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true ) IS NULL ) OR
@@ -587,9 +589,11 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_1_COL_1" ,
          |  (
          |    COALESCE (
-         |      ARRAY_POSITION (
-         |        'test4' ::VARIANT ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true )
+         |      (
+         |        ARRAY_POSITION (
+         |          'test4' ::VARIANT ,
+         |          ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true )
+         |        ) + 1
          |      ) ,
          |      IFF (
          |        ( ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true ) IS NULL ) OR
@@ -601,9 +605,11 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_1_COL_2" ,
          |  (
          |    COALESCE (
-         |      ARRAY_POSITION (
-         |        2 ::VARIANT ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true )
+         |      (
+         |        ARRAY_POSITION (
+         |          2 ::VARIANT ,
+         |          ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true )
+         |        ) + 1
          |      ) ,
          |      IFF (
          |        ( ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true ) IS NULL ) OR
@@ -615,9 +621,11 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
          |  ) AS "SUBQUERY_1_COL_3" ,
          |  (
          |    COALESCE (
-         |      ARRAY_POSITION (
-         |        6 ::VARIANT ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true )
+         |      (
+         |        ARRAY_POSITION (
+         |          6 ::VARIANT ,
+         |          ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true )
+         |        ) + 1
          |      ) ,
          |      IFF (
          |        ( ( ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true ) IS NULL ) OR

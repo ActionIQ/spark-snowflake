@@ -104,17 +104,15 @@ private[querygeneration] object StringStatement {
       case RegExpExtract(subject, Literal(pattern: UTF8String, StringType), idx) =>
         val regExpr = patternStrToJavaEscapedRegExpr(pattern)
 
-        // Wrapping in Coalesce to mimic Spark function's functionality in Snowflake
-        functionStatement(
-          "COALESCE",
-          Seq(
-            functionStatement(
-              "REGEXP_SUBSTR",
-              Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
-                .map(convertStatement(_, fields)),
-            ),
-            convertStatement(nullSafeExpr(Seq(subject, regExpr, idx), Literal("")), fields),
-          ),
+        val regExpExtractStmt = functionStatement(
+          "REGEXP_SUBSTR",
+          Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
+          .map(convertStatement(_, fields)),
+        )
+
+        nullSafeStmt(
+          regExpExtractStmt,
+          convertStatement(nullSafeExpr(Seq(subject, regExpr, idx), Literal("")), fields),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
