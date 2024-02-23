@@ -1,12 +1,10 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.SnowflakeSQLStatement
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
 import org.apache.spark.sql.types.ArrayType
 
 import scala.language.postfixOps
-import scala.util.Try
 
 /**
  * Extractor for collection-style expressions.
@@ -38,7 +36,11 @@ private[querygeneration] object CollectionStatement {
         functionStatement(
           expr.prettyName.toUpperCase,
           // arguments are in reverse order in Snowflake so exchanging here
-          Seq(e.right, e.left).map(convertStatement(_, fields)),
+          Seq(
+            // value expression must evaluate to variant
+            convertStatement(e.right, fields) + "::VARIANT",
+            convertStatement(e.left, fields)
+          ),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_distinct
@@ -52,14 +54,14 @@ private[querygeneration] object CollectionStatement {
       case e: ArrayExcept =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(expr => convertStatement(ArrayDistinct(expr), fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_intersection
       case e: ArrayIntersect =>
         functionStatement(
           "ARRAY_INTERSECTION",
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
+          Seq(e.left, e.right).map(expr => convertStatement(ArrayDistinct(expr), fields)),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_to_string
@@ -70,18 +72,20 @@ private[querygeneration] object CollectionStatement {
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_max
-      case e: ArrayMax =>
-        functionStatement(
+      // https://docs.snowflake.com/en/sql-reference/functions/array_min
+      case minOrMax @ ( _: ArrayMax | _: ArrayMin) =>
+        val minOrMaxStmt = functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(convertStatement(e.child, fields)),
+          Seq(convertStatements(fields, minOrMax.children: _*)),
         )
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_min
-      case e: ArrayMin =>
-        functionStatement(
-          expr.prettyName.toUpperCase,
-          Seq(convertStatement(e.child, fields)),
-        )
+        // Casting to the Array elements type to make sure the returned type is the expected one
+        MiscStatement.getCastType(minOrMax.dataType) match {
+          case Some(cast) =>
+            ConstantString("CAST") +
+              blockStatement(minOrMaxStmt + "AS" + cast)
+          case _ => null
+        }
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_position
       case e: ArrayPosition =>
@@ -121,7 +125,7 @@ private[querygeneration] object CollectionStatement {
       // https://docs.snowflake.com/en/sql-reference/functions/array_construct_compact
       case e: CreateArray if e.checkInputDataTypes().isSuccess =>
         functionStatement(
-          "ARRAY_CONSTRUCT_COMPACT",
+          "ARRAY_CONSTRUCT",
           Seq(convertStatements(fields, e.children: _*)),
         )
 
@@ -177,10 +181,10 @@ private[querygeneration] object CollectionStatement {
 
       // STRUCT
 
-      // https://docs.snowflake.com/en/sql-reference/functions/object_agg
+      // https://docs.snowflake.com/en/sql-reference/functions/object_construct_keep_null
       case e: CreateNamedStruct =>
         functionStatement(
-          "OBJECT_AGG",
+          "OBJECT_CONSTRUCT_KEEP_NULL",
           Seq(convertStatements(fields, e.children: _*)),
         )
 
