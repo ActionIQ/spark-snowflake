@@ -2,9 +2,11 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.SnowflakeSQLStatement
 import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, Slice, SortArray, StructsToJson}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.ArrayType
 
 import scala.language.postfixOps
+import scala.util.Try
 
 /**
  * Extractor for collection-style expressions.
@@ -116,10 +118,10 @@ private[querygeneration] object CollectionStatement {
           Seq(convertStatements(fields, e.children: _*)),
         )
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_construct
-      case e: CreateArray =>
+      // https://docs.snowflake.com/en/sql-reference/functions/array_construct_compact
+      case e: CreateArray if e.checkInputDataTypes().isSuccess =>
         functionStatement(
-          "ARRAY_CONSTRUCT",
+          "ARRAY_CONSTRUCT_COMPACT",
           Seq(convertStatements(fields, e.children: _*)),
         )
 

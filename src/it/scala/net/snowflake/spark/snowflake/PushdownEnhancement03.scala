@@ -21,7 +21,6 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.snowflake.SFQueryTest
 
 import java.sql.Timestamp
 
@@ -67,18 +66,18 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
   // Aggregate-style
 
   test("AIQ test pushdown approx_count_dist") {
-    jdbcUpdate(s"create or replace table $test_table_date (s string, i int)")
+    jdbcUpdate(s"create or replace table $test_table_basic (s string, i int)")
     (0 until 100).foreach { i =>
       if (i % 5 == 0) {
-        jdbcUpdate(s"insert into $test_table_date values ('hello $i', $i)")
+        jdbcUpdate(s"insert into $test_table_basic values ('hello $i', $i)")
       }
-      jdbcUpdate(s"insert into $test_table_date values ('hello $i', ${i.max(30)})")
+      jdbcUpdate(s"insert into $test_table_basic values ('hello $i', ${i.max(30)})")
     }
 
     val tmpDF = sparkSession.read
       .format(SNOWFLAKE_SOURCE_NAME)
       .options(thisConnectorOptionsNoTable)
-      .option("dbtable", test_table_date)
+      .option("dbtable", test_table_basic)
       .load()
 
     {
@@ -89,7 +88,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
            |FROM (
            |  SELECT ( "SUBQUERY_0"."S" ) AS "SUBQUERY_1_COL_0"
            |  FROM (
-           |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+           |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
            |  ) AS "SUBQUERY_1" LIMIT 1
            |""".stripMargin,
         pushDf,
@@ -107,7 +106,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
            |FROM (
            |  SELECT ( "SUBQUERY_0"."I" ) AS "SUBQUERY_1_COL_0"
            |  FROM (
-           |    SELECT * FROM ( $test_table_date ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
+           |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS" ) AS "SUBQUERY_0"
            |  ) AS "SUBQUERY_1" LIMIT 1
            |""".stripMargin,
         pushDf,
@@ -148,7 +147,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
         )
       )
     )
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT (
          |  ARRAY_SORT (
@@ -165,12 +164,12 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFStr,
+      expectedResultStr,
     )
-    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
 
     val resultDFInt = tmpDF.selectExpr("sort_array(collect_list(s2))")
     val expectedResultInt = Seq(Row(Array(1, 1, 2, 3).map(BigDecimal(_))))
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT (
          |  ARRAY_SORT (
@@ -187,8 +186,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFInt,
+      expectedResultInt,
     )
-    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 
     val resultDFGroupBy = tmpDF
       .groupBy("id")
@@ -210,7 +209,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       Row(BigDecimal(2), Array(testString()), Array(BigDecimal(3))),
       Row(null, Array(), Array()),
     )
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
@@ -222,8 +221,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |GROUP BY "SUBQUERY_0"."ID"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFGroupBy,
+      expectedResultGroupBy,
     )
-    SFQueryTest.checkAnswer(resultDFGroupBy, expectedResultGroupBy)
   }
 
   test("AIQ test pushdown collect_set") {
@@ -255,7 +254,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
         )
       )
     )
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT (
          |  ARRAY_SORT (
@@ -272,12 +271,12 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFStr,
+      expectedResultStr,
     )
-    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
 
     val resultDFInt = tmpDF.selectExpr("sort_array(collect_set(s2))")
     val expectedResultInt = Seq(Row(Array(1, 2, 3).map(BigDecimal(_))))
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT (
          |  ARRAY_SORT (
@@ -294,8 +293,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_1" LIMIT 1
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFInt,
+      expectedResultInt,
     )
-    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 
     val resultDFGroupBy = tmpDF
       .groupBy("id")
@@ -317,7 +316,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       Row(BigDecimal(2), Array(testString()), Array(BigDecimal(3))),
       Row(null, Array(), Array()),
     )
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
@@ -329,8 +328,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |GROUP BY "SUBQUERY_0"."ID"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDFGroupBy,
+      expectedResultGroupBy,
     )
-    SFQueryTest.checkAnswer(resultDFGroupBy, expectedResultGroupBy)
   }
 
   // Cryptographic-Style
@@ -2580,7 +2579,7 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
       Row(null, null, null, null),
     )
 
-    testPushdownSql(
+    testPushdown(
       s"""
          |SELECT
          |  (
@@ -2613,8 +2612,8 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
          |) AS "SUBQUERY_0"
          |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
       resultDF,
+      expectedResult,
     )
-    SFQueryTest.checkAnswer(resultDF, expectedResult)
   }
 
   test("AIQ test pushdown regexp_replace") {
@@ -2992,76 +2991,76 @@ class PushdownEnhancement03 extends IntegrationSuiteBase {
 
   // Collection-Style
 
-  //  test("AIQ test pushdown array") {
-  //    jdbcUpdate(s"create or replace table $test_table_basic " +
-  //      s"(s1 string, s2 string, i1 bigint, i2 bigint)")
-  //    jdbcUpdate(s"insert into $test_table_basic values " +
-  //      s"""
-  //         |('hello1', 'test1', 1, 2),
-  //         |('hello2', 'test2', 3, 4),
-  //         |('hello3', 'test3', 5, 6),
-  //         |('hello4', 'test4', 7, 8),
-  //         |('hello5', NULL, 9, NULL),
-  //         |(NULL, 'test6', NULL, 12),
-  //         |(NULL, NULL, NULL, NULL)
-  //         |""".stripMargin.linesIterator.mkString(" ").trim
-  //    )
-  //
-  //    val tmpDF = sparkSession.read
-  //      .format(SNOWFLAKE_SOURCE_NAME)
-  //      .options(thisConnectorOptionsNoTable)
-  //      .option("dbtable", test_table_basic)
-  //      .load()
-  //
-  //    val resultDFStr = tmpDF.selectExpr("array(s1, s2)")
-  //    val expectedResultStr = Seq(
-  //      ("hello1", "test1"),
-  //      ("hello2", "test2"),
-  //      ("hello3", "test3"),
-  //      ("hello4", "test4"),
-  //      ("hello5", undefined),
-  //      (undefined, "test6"),
-  //      (undefined, undefined),
-  //    ).map{ case (v1, v2) => Row(Seq(v1, v2).toArray) }
-  //
-  //    val resultDFInt = tmpDF.selectExpr("array(i1, i2)")
-  //    val expectedResultInt = Seq(
-  //      (1, 2),
-  //      (3, 4),
-  //      (5, 6),
-  //      (7, 8),
-  //      (9, null),
-  //      (null, 12),
-  //      (null, null),
-  //    ).map{ case (v1, v2) => Row(Seq(v1, v2).toArray) }
-  //
-  //    testPushdown(
-  //      s"""
-  //         |SELECT (
-  //         |  ARRAY_CONSTRUCT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" )
-  //         |) AS "SUBQUERY_1_COL_0"
-  //         |FROM (
-  //         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-  //         |) AS "SUBQUERY_0"
-  //         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-  //      resultDFStr,
-  //      expectedResultStr
-  //    )
-  //
-  //    testPushdown(
-  //      s"""
-  //         |SELECT (
-  //         |  ARRAY_CONSTRUCT ( "SUBQUERY_0"."I1" , "SUBQUERY_0"."I2" )
-  //         |) AS "SUBQUERY_1_COL_0"
-  //         |FROM (
-  //         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-  //         |) AS "SUBQUERY_0"
-  //         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-  //      resultDFInt,
-  //      expectedResultInt
-  //    )
-  //  }
-  //
+  test("AIQ test pushdown array") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"""
+         |(1, 'hello1', 'test1', 1, 2),
+         |(1, 'hello2', 'test2', 3, 4),
+         |(2, 'hello3', 'test3', 5, 6),
+         |(2, 'hello4', 'test4', 7, 8),
+         |(3, 'hello5', NULL, 9, NULL),
+         |(3, NULL, 'test6', NULL, 12),
+         |(3, NULL, NULL, NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDFStr = tmpDF.selectExpr("array(s1, s2)")
+    val expectedResultStr = Seq(
+      Array("hello1", "test1"),
+      Array("hello2", "test2"),
+      Array("hello3", "test3"),
+      Array("hello4", "test4"),
+      Array("hello5"),
+      Array("test6"),
+      Array[String](),
+    ).map(Row(_))
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFStr,
+      expectedResultStr,
+    )
+
+    val resultDFInt = tmpDF.selectExpr("array(i1, i2)")
+    val expectedResultInt = Seq(
+      Seq(1, 2),
+      Seq(3, 4),
+      Seq(5, 6),
+      Seq(7, 8),
+      Seq(9),
+      Seq(12),
+      Seq[Int](),
+    ).map { r => Row(r.map(BigDecimal(_)).toArray) }
+
+    testPushdown(
+      s"""
+         |SELECT (
+         |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."I1" , "SUBQUERY_0"."I2" )
+         |) AS "SUBQUERY_1_COL_0"
+         |FROM (
+         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDFInt,
+      expectedResultInt,
+    )
+  }
+
   //  test("AIQ test pushdown size") {
   //    jdbcUpdate(s"create or replace table $test_table_basic " +
   //      s"(s1 string, s2 bigint)")
