@@ -104,7 +104,7 @@ private[querygeneration] object CollectionStatement {
               castExpressionToVariant(e.right, fields),
               convertStatement(e.left, fields)
             ),
-          // Spark function is (1-based) indexed
+          // Spark function is 1-based indexed whereas Snowflake is 0-based indexed
           ) + ConstantString("+ 1")
         )
 
