@@ -45,7 +45,7 @@ private[querygeneration] object CollectionStatement {
           Seq(
             // value expression must evaluate to variant
             castExpressionToVariant(e.right, fields),
-            convertStatement(e.left, fields)
+            convertStatement(e.left, fields),
           ),
         )
 
@@ -102,7 +102,7 @@ private[querygeneration] object CollectionStatement {
             Seq(
               // value expression must evaluate to variant
               castExpressionToVariant(e.right, fields),
-              convertStatement(e.left, fields)
+              convertStatement(e.left, fields),
             ),
           // Spark function is 1-based indexed whereas Snowflake is 0-based indexed
           ) + ConstantString("+ 1")
@@ -117,7 +117,11 @@ private[querygeneration] object CollectionStatement {
       case e: ArrayRemove =>
         functionStatement(
           expr.prettyName.toUpperCase,
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
+          Seq(
+            convertStatement(e.left, fields),
+            // value expression must evaluate to variant
+            castExpressionToVariant(e.right, fields),
+          ),
         )
 
       case e: ArrayUnion =>
