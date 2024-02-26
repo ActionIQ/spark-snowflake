@@ -110,9 +110,9 @@ private[querygeneration] object StringStatement {
           .map(convertStatement(_, fields)),
         )
 
-        nullSafeStmt(
+        nullIntolerantStmt(
           regExpExtractStmt,
-          convertStatement(nullSafeExpr(Seq(subject, regExpr, idx), Literal("")), fields),
+          convertStatement(nullIntolerantExpr(Seq(subject, regExpr, idx), Literal("")), fields),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all

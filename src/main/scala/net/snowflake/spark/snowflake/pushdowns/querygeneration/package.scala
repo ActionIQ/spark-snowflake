@@ -115,7 +115,7 @@ package object querygeneration {
   // Using this Expression to map the Spark-Snowflake function results 1-1
   //  - Spark returns null if any of the inputs is null and a default value if no matches
   //  - Snowflake returns null if any of the inputs is null AND for no matches
-  private[querygeneration] final def nullSafeExpr(
+  private[querygeneration] final def nullIntolerantExpr(
     inputs: Seq[Expression],
     default: Expression,
   ): Expression = {
@@ -134,7 +134,7 @@ package object querygeneration {
   }
 
   // Same as above, using this Statement to map the Spark-Snowflake function results 1-1
-  private[querygeneration] final def nullSafeStmt(
+  private[querygeneration] final def nullIntolerantStmt(
     statement: SnowflakeSQLStatement,
     defaultStmt: SnowflakeSQLStatement,
   ): SnowflakeSQLStatement = {

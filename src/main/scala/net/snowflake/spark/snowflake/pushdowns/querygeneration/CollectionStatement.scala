@@ -108,9 +108,9 @@ private[querygeneration] object CollectionStatement {
           ) + ConstantString("+ 1")
         )
 
-        nullSafeStmt(
+        nullIntolerantStmt(
           arrayPositionStmt,
-          convertStatement(nullSafeExpr(e.children, Literal(0)), fields),
+          convertStatement(nullIntolerantExpr(e.children, Literal(0)), fields),
         )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_remove
