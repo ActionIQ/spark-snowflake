@@ -1,9 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, If, IsNull, JsonToStructs, Literal, Or, Size, Slice, SortArray, StructsToJson}
-import org.apache.spark.sql.types.ArrayType
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, CaseWhen, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, If, IsNull, JsonToStructs, Literal, Or, Size, Slice, SortArray, StructsToJson}
+import org.apache.spark.sql.types.{ArrayType, NullType}
 
 import scala.language.postfixOps
 
@@ -128,13 +127,6 @@ private[querygeneration] object CollectionStatement {
         // we need distinct to map 1-1 with the Spark implementation that returns an
         // array of the elements in the union of array1 and array2 without duplicates
         convertStatement(ArrayDistinct(Concat(Seq(e.left, e.right))), fields)
-
-      // https://docs.snowflake.com/en/sql-reference/functions/arrays_overlap
-      case e: ArraysOverlap =>
-        functionStatement(
-          expr.prettyName.toUpperCase,
-          Seq(e.left, e.right).map(convertStatement(_, fields)),
-        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_cat
       case e: Concat
