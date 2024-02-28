@@ -136,12 +136,12 @@ private[querygeneration] object CollectionStatement {
           Seq(convertStatements(fields, e.children: _*)),
         )
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
-      case e: Flatten =>
-        functionStatement(
-          "ARRAY_FLATTEN",
-          Seq(convertStatement(e.child, fields)),
-        )
+//      // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
+//      case e: Flatten =>
+//        functionStatement(
+//          "ARRAY_FLATTEN",
+//          Seq(convertStatement(e.child, fields)),
+//        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_size
       case e: Size =>
@@ -154,12 +154,12 @@ private[querygeneration] object CollectionStatement {
           case _ => null
         }
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_slice
-      case e: Slice =>
-        functionStatement(
-          "ARRAY_SLICE",
-          Seq(e.x, e.start, e.length).map(convertStatement(_, fields)),
-        )
+//      // https://docs.snowflake.com/en/sql-reference/functions/array_slice
+//      case e: Slice =>
+//        functionStatement(
+//          "ARRAY_SLICE",
+//          Seq(e.x, e.start, e.length).map(convertStatement(_, fields)),
+//        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_sort
       case e: SortArray =>
