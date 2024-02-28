@@ -20,7 +20,6 @@ import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_NAME
 import net.snowflake.spark.snowflake.test.TestHook
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, expr}
-import org.apache.spark.sql.snowflake.SFQueryTest
 
 import java.util.TimeZone
 
@@ -1201,75 +1200,5 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
 //      resultDF,
 //      expectedResult,
 //    )
-//  }
-//
-//  test("AIQ test pushdown array") {
-//    jdbcUpdate(s"create or replace table $test_table_basic " +
-//      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
-//    jdbcUpdate(s"insert into $test_table_basic values " +
-//      s"""
-//         |(1, 'hello1', 'test1', 1, 2),
-//         |(1, 'hello2', 'test2', 3, 4),
-//         |(2, 'hello3', 'test3', 5, 6),
-//         |(2, 'hello4', 'test4', 7, 8),
-//         |(3, 'hello5', NULL, 9, NULL),
-//         |(3, NULL, 'test6', NULL, 12),
-//         |(3, NULL, NULL, NULL, NULL)
-//         |""".stripMargin.linesIterator.mkString(" ").trim
-//    )
-//
-//    val tmpDF = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("dbtable", test_table_basic)
-//      .load()
-//
-//    val resultDFStr = tmpDF.selectExpr("array(s1, s2)")
-//    val expectedResultStr = Seq(
-//      Array("hello1", "test1"),
-//      Array("hello2", "test2"),
-//      Array("hello3", "test3"),
-//      Array("hello4", "test4"),
-//      Array("hello5"),
-//      Array("test6"),
-//      Array[String](),
-//    ).map(Row(_))
-//
-//    testPushdownSql(
-//      s"""
-//         |SELECT (
-//         |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."S1" , "SUBQUERY_0"."S2" )
-//         |) AS "SUBQUERY_1_COL_0"
-//         |FROM (
-//         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-//         |) AS "SUBQUERY_0"
-//         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-//      resultDFStr,
-//    )
-//    SFQueryTest.checkAnswer(resultDFStr, expectedResultStr)
-//
-//    val resultDFInt = tmpDF.selectExpr("array(i1, i2)")
-//    val expectedResultInt = Seq(
-//      Seq(1, 2),
-//      Seq(3, 4),
-//      Seq(5, 6),
-//      Seq(7, 8),
-//      Seq(9),
-//      Seq(12),
-//      Seq[Int](),
-//    ).map { r => Row(r.map(BigDecimal(_)).toArray) }
-//
-//    testPushdownSql(
-//      s"""
-//         |SELECT (
-//         |  ARRAY_CONSTRUCT_COMPACT ( "SUBQUERY_0"."I1" , "SUBQUERY_0"."I2" )
-//         |) AS "SUBQUERY_1_COL_0"
-//         |FROM (
-//         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-//         |) AS "SUBQUERY_0"
-//         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-//      resultDFInt,
-//    )
-//    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 //  }
 }
