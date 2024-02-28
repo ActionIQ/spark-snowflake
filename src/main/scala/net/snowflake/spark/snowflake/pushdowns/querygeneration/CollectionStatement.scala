@@ -136,13 +136,6 @@ private[querygeneration] object CollectionStatement {
           Seq(convertStatements(fields, e.children: _*)),
         )
 
-      // https://docs.snowflake.com/en/sql-reference/functions/array_construct_compact
-      case e: CreateArray if e.checkInputDataTypes().isSuccess =>
-        functionStatement(
-          "ARRAY_CONSTRUCT",
-          Seq(convertStatements(fields, e.children: _*)),
-        )
-
       // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
       case e: Flatten =>
         functionStatement(
