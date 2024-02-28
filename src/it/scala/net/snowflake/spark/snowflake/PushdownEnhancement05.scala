@@ -900,6 +900,110 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
     )
   }
 
+  test("AIQ test pushdown flatten") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(id1 bigint, id2 bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"""
+         |(0, 1, 'hello1', 'test1', 1, 2),
+         |(0, 1, 'hello2', 'test2', 2, NULL),
+         |(0, 1, 'hello2', NULL, 2, NULL),
+         |(0, 2, 'hello4', 'test4', 4, 3),
+         |(0, 2, 'hello5', 'test5', 5, NULL),
+         |(0, 2, 'hello6', NULL, NULL, 6),
+         |(0, 2, NULL, 'test7', NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDF = tmpDF
+      .groupBy("id1", "id2")
+      .agg(
+        expr("collect_list(s1) as s1_agg"),
+        expr("collect_list(s2) as s2_agg"),
+        expr("collect_list(i1) as i1_agg"),
+        expr("collect_list(i2) as i2_agg"),
+      )
+      .selectExpr("*")
+      .groupBy("id1")
+      .agg(
+        expr("collect_list(s1_agg) as s1_overall_agg"),
+        expr("collect_list(s2_agg) as s2_overall_agg"),
+        expr("collect_list(i1_agg) as i1_overall_agg"),
+        expr("collect_list(i2_agg) as i2_overall_agg"),
+      )
+      .select(
+        col("id1"),
+        expr("sort_array(flatten(s1_overall_agg))").alias("flatten_s1"),
+        expr("sort_array(flatten(s2_overall_agg))").alias("flatten_s2"),
+        expr("sort_array(flatten(i1_overall_agg))").alias("flatten_i1"),
+        expr("sort_array(flatten(i2_overall_agg))").alias("flatten_i2"),
+      )
+    val expectedResult = Seq(
+      Row(
+        BigDecimal(0),
+        Array("hello1", "hello2", "hello2", "hello4", "hello5", "hello6"),
+        Array("test1", "test2", "test4", "test5", "test7"),
+        Array(1, 2, 2, 4, 5),
+        Array(2, 3, 6),
+      ),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( "SUBQUERY_1"."SUBQUERY_1_COL_0" ) AS "SUBQUERY_2_COL_0" ,
+         |  (
+         |    ARRAY_SORT (
+         |      ARRAY_FLATTEN (
+         |        ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_1" )
+         |      ) , true , true
+         |    )
+         |  ) AS "SUBQUERY_2_COL_1" ,
+         |  (
+         |    ARRAY_SORT (
+         |      ARRAY_FLATTEN (
+         |        ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_2" )
+         |      ) , true , true
+         |    )
+         |  ) AS "SUBQUERY_2_COL_2" ,
+         |  (
+         |    ARRAY_SORT (
+         |      ARRAY_FLATTEN (
+         |        ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_3" )
+         |      ) , true , true
+         |    )
+         |  ) AS "SUBQUERY_2_COL_3" ,
+         |  (
+         |    ARRAY_SORT (
+         |      ARRAY_FLATTEN (
+         |        ARRAY_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_4" )
+         |      ) , true , true
+         |    )
+         |  ) AS "SUBQUERY_2_COL_4"
+         |FROM (
+         |  SELECT
+         |    ( "SUBQUERY_0"."ID1" ) AS "SUBQUERY_1_COL_0" ,
+         |    ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) ) AS "SUBQUERY_1_COL_1" ,
+         |    ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) ) AS "SUBQUERY_1_COL_2" ,
+         |    ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) ) AS "SUBQUERY_1_COL_3" ,
+         |    ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) ) AS "SUBQUERY_1_COL_4"
+         |  FROM (
+         |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |  ) AS "SUBQUERY_0"
+         |  GROUP BY "SUBQUERY_0"."ID1" , "SUBQUERY_0"."ID2"
+         |) AS "SUBQUERY_1"
+         |GROUP BY "SUBQUERY_1"."SUBQUERY_1_COL_0"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
   test("AIQ test pushdown size") {
     jdbcUpdate(s"create or replace table $test_table_basic " +
       s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
@@ -1038,82 +1142,6 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
     )
   }
 
-
-//  test("AIQ test pushdown flatten") {
-//    jdbcUpdate(s"create or replace table $test_table_basic " +
-//      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
-//    jdbcUpdate(s"insert into $test_table_basic values " +
-//      s"""
-//         |(1, 'hello1', 'test1', 1, 2),
-//         |(1, 'hello2', 'test2', 2, NULL),
-//         |(1, 'hello2', NULL, 2, NULL),
-//         |(2, 'hello4', 'test4', 4, 3),
-//         |(2, 'hello5', 'test5', 5, NULL),
-//         |(2, 'hello6', NULL, NULL, 6),
-//         |(2, NULL, 'test7', NULL, NULL)
-//         |""".stripMargin.linesIterator.mkString(" ").trim
-//    )
-//
-//    val tmpDF = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("dbtable", test_table_basic)
-//      .load()
-//
-//    val resultDF = tmpDF
-//      .groupBy("id")
-//      .agg(
-//        expr("collect_list(s1) as s1_agg"),
-//        expr("collect_list(s2) as s2_agg"),
-//        expr("collect_list(i1) as i1_agg"),
-//        expr("collect_list(i2) as i2_agg"),
-//      )
-//      .select(
-//        col("id"),
-//        expr("sort_array(flatten(s1_s2_agg))").alias("flatten_s1_s2"),
-//        expr("sort_array(flatten(i1_i2_agg))").alias("flatten_i1_i2"),
-//      )
-//    val expectedResult = Seq(
-//      Row(
-//        BigDecimal(1),
-//        Array("hello1", "hello2", "hello2", "test1", "test2"),
-//        Array(1, 2, 2, 2),
-//      ),
-//      Row(
-//        BigDecimal(2),
-//        Array("hello4", "hello5", "hello6", "test4", "test5", "test7"),
-//        Array(3, 4, 5, 6),
-//      ),
-//    )
-//    testPushdown(
-//      s"""
-//         |SELECT
-//         |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
-//         |  (
-//         |    ARRAY_SORT (
-//         |      ARRAY_CAT (
-//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true ) ,
-//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true )
-//         |      ) , true , true
-//         |    )
-//         |  ) AS "SUBQUERY_1_COL_1" ,
-//         |  (
-//         |    ARRAY_SORT (
-//         |      ARRAY_CAT (
-//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true ) ,
-//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true )
-//         |      ) , true , true
-//         |    )
-//         |  ) AS "SUBQUERY_1_COL_2"
-//         |FROM (
-//         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-//         |) AS "SUBQUERY_0"
-//         |GROUP BY "SUBQUERY_0"."ID"
-//         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-//      resultDF,
-//      expectedResult,
-//    )
-//  }
 
 //  test("AIQ test pushdown named_struct") {
 //    jdbcUpdate(s"create or replace table $test_table_basic " +

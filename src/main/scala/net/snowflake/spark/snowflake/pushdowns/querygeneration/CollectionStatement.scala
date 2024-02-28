@@ -1,8 +1,8 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
-import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, ArraysOverlap, Attribute, CaseWhen, Cast, Concat, CreateArray, CreateNamedStruct, Expression, Flatten, If, IsNull, JsonToStructs, Literal, Or, Size, Slice, SortArray, StructsToJson}
-import org.apache.spark.sql.types.{ArrayType, NullType}
+import org.apache.spark.sql.catalyst.expressions.{ArrayContains, ArrayDistinct, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayMax, ArrayMin, ArrayPosition, ArrayRemove, ArrayUnion, Attribute, Concat, CreateNamedStruct, Expression, Flatten, JsonToStructs, Literal, Size, SortArray, StructsToJson}
+import org.apache.spark.sql.types.ArrayType
 
 import scala.language.postfixOps
 
@@ -136,12 +136,12 @@ private[querygeneration] object CollectionStatement {
           Seq(convertStatements(fields, e.children: _*)),
         )
 
-//      // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
-//      case e: Flatten =>
-//        functionStatement(
-//          "ARRAY_FLATTEN",
-//          Seq(convertStatement(e.child, fields)),
-//        )
+      // https://docs.snowflake.com/en/sql-reference/functions/array_flatten
+      case e: Flatten =>
+        functionStatement(
+          "ARRAY_FLATTEN",
+          Seq(convertStatement(e.child, fields)),
+        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_size
       case e: Size =>
@@ -153,13 +153,6 @@ private[querygeneration] object CollectionStatement {
             )
           case _ => null
         }
-
-//      // https://docs.snowflake.com/en/sql-reference/functions/array_slice
-//      case e: Slice =>
-//        functionStatement(
-//          "ARRAY_SLICE",
-//          Seq(e.x, e.start, e.length).map(convertStatement(_, fields)),
-//        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/array_sort
       case e: SortArray =>
