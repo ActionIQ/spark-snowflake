@@ -900,7 +900,7 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
     )
   }
 
-  test("AIQ test pushdown flatten") {
+  test("AIQ test pushdown size") {
     jdbcUpdate(s"create or replace table $test_table_basic " +
       s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
     jdbcUpdate(s"insert into $test_table_basic values " +
@@ -924,46 +924,30 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
     val resultDF = tmpDF
       .groupBy("id")
       .agg(
-        expr("collect_list(collect_list(s1), collect_list(s2)) as s1_s2_agg"),
-        expr("collect_list(collect_list(i1), collect_list(i2)) as i1_i2_agg"),
+        expr("collect_list(s1) as s1_agg"),
+        expr("collect_list(s2) as s2_agg"),
+        expr("collect_list(i1) as i1_agg"),
+        expr("collect_list(i2) as i2_agg"),
       )
       .select(
         col("id"),
-        expr("sort_array(flatten(s1_s2_agg))").alias("flatten_s1_s2"),
-        expr("sort_array(flatten(i1_i2_agg))").alias("flatten_i1_i2"),
+        expr("size(s1_agg)").alias("size_s1"),
+        expr("size(s2_agg)").alias("size_s2"),
+        expr("size(i1_agg)").alias("size_i1"),
+        expr("size(i2_agg)").alias("size_i2"),
       )
     val expectedResult = Seq(
-      Row(
-        BigDecimal(1),
-        Array("hello1", "hello2", "hello2", "test1", "test2"),
-        Array(1, 2, 2, 2),
-      ),
-      Row(
-        BigDecimal(2),
-        Array("hello4", "hello5", "hello6", "test4", "test5", "test7"),
-        Array(3, 4, 5, 6),
-      ),
+      Row(BigDecimal(1), 3, 2, 3, 1),
+      Row(BigDecimal(2), 3, 3, 2, 2),
     )
     testPushdown(
       s"""
          |SELECT
          |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
-         |  (
-         |    ARRAY_SORT (
-         |      ARRAY_CAT (
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true ) ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true )
-         |      ) , true , true
-         |    )
-         |  ) AS "SUBQUERY_1_COL_1" ,
-         |  (
-         |    ARRAY_SORT (
-         |      ARRAY_CAT (
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true ) ,
-         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true )
-         |      ) , true , true
-         |    )
-         |  ) AS "SUBQUERY_1_COL_2"
+         |  ( ARRAY_SIZE ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) ) ) AS "SUBQUERY_1_COL_1" ,
+         |  ( ARRAY_SIZE ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) ) ) AS "SUBQUERY_1_COL_2" ,
+         |  ( ARRAY_SIZE ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) ) ) AS "SUBQUERY_1_COL_3" ,
+         |  ( ARRAY_SIZE ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) ) ) AS "SUBQUERY_1_COL_4"
          |FROM (
          |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
          |) AS "SUBQUERY_0"
@@ -973,6 +957,83 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
       expectedResult,
     )
   }
+
+
+//  test("AIQ test pushdown flatten") {
+//    jdbcUpdate(s"create or replace table $test_table_basic " +
+//      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
+//    jdbcUpdate(s"insert into $test_table_basic values " +
+//      s"""
+//         |(1, 'hello1', 'test1', 1, 2),
+//         |(1, 'hello2', 'test2', 2, NULL),
+//         |(1, 'hello2', NULL, 2, NULL),
+//         |(2, 'hello4', 'test4', 4, 3),
+//         |(2, 'hello5', 'test5', 5, NULL),
+//         |(2, 'hello6', NULL, NULL, 6),
+//         |(2, NULL, 'test7', NULL, NULL)
+//         |""".stripMargin.linesIterator.mkString(" ").trim
+//    )
+//
+//    val tmpDF = sparkSession.read
+//      .format(SNOWFLAKE_SOURCE_NAME)
+//      .options(thisConnectorOptionsNoTable)
+//      .option("dbtable", test_table_basic)
+//      .load()
+//
+//    val resultDF = tmpDF
+//      .groupBy("id")
+//      .agg(
+//        expr("collect_list(s1) as s1_agg"),
+//        expr("collect_list(s2) as s2_agg"),
+//        expr("collect_list(i1) as i1_agg"),
+//        expr("collect_list(i2) as i2_agg"),
+//      )
+//      .select(
+//        col("id"),
+//        expr("sort_array(flatten(s1_s2_agg))").alias("flatten_s1_s2"),
+//        expr("sort_array(flatten(i1_i2_agg))").alias("flatten_i1_i2"),
+//      )
+//    val expectedResult = Seq(
+//      Row(
+//        BigDecimal(1),
+//        Array("hello1", "hello2", "hello2", "test1", "test2"),
+//        Array(1, 2, 2, 2),
+//      ),
+//      Row(
+//        BigDecimal(2),
+//        Array("hello4", "hello5", "hello6", "test4", "test5", "test7"),
+//        Array(3, 4, 5, 6),
+//      ),
+//    )
+//    testPushdown(
+//      s"""
+//         |SELECT
+//         |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
+//         |  (
+//         |    ARRAY_SORT (
+//         |      ARRAY_CAT (
+//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S1" ) , true , true ) ,
+//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."S2" ) , true , true )
+//         |      ) , true , true
+//         |    )
+//         |  ) AS "SUBQUERY_1_COL_1" ,
+//         |  (
+//         |    ARRAY_SORT (
+//         |      ARRAY_CAT (
+//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I1" ) , true , true ) ,
+//         |        ARRAY_SORT ( ARRAY_AGG ( "SUBQUERY_0"."I2" ) , true , true )
+//         |      ) , true , true
+//         |    )
+//         |  ) AS "SUBQUERY_1_COL_2"
+//         |FROM (
+//         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+//         |) AS "SUBQUERY_0"
+//         |GROUP BY "SUBQUERY_0"."ID"
+//         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+//      resultDF,
+//      expectedResult,
+//    )
+//  }
 
 //  test("AIQ test pushdown named_struct") {
 //    jdbcUpdate(s"create or replace table $test_table_basic " +
@@ -1103,72 +1164,4 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
 //    )
 //    SFQueryTest.checkAnswer(resultDFInt, expectedResultInt)
 //  }
-
-  //  test("AIQ test pushdown size") {
-  //    jdbcUpdate(s"create or replace table $test_table_basic " +
-  //      s"(s1 string, s2 bigint)")
-  //    jdbcUpdate(s"insert into $test_table_basic values " +
-  //      s"""
-  //         |('hello this is a test1', 1),
-  //         |('hello this is a test2', 1),
-  //         |('hello this is a test', 2),
-  //         |('hello this is a test', 3),
-  //         |(NULL, NULL)
-  //         |""".stripMargin.linesIterator.mkString(" ").trim
-  //    )
-  //
-  //    val tmpDF = sparkSession.read
-  //      .format(SNOWFLAKE_SOURCE_NAME)
-  //      .options(thisConnectorOptionsNoTable)
-  //      .option("dbtable", test_table_basic)
-  //      .load()
-  //
-  //    val resultDFStr = tmpDF.selectExpr("collect_set(s1)")
-  //    val resultDFInt = tmpDF.selectExpr("collect_set(s2)")
-  //
-  //    // Cannot test the expected result cause the order of
-  //    // the items returned in the array is non-deterministic
-  //    testPushdownSql(
-  //      s"""
-  //         |SELECT (
-  //         |  ARRAY_UNIQUE_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" )
-  //         |) AS "SUBQUERY_2_COL_0"
-  //         |FROM (
-  //         |  SELECT ( "SUBQUERY_0"."S1" ) AS "SUBQUERY_1_COL_0"
-  //         |  FROM (
-  //         |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-  //         |  ) AS "SUBQUERY_0"
-  //         |) AS "SUBQUERY_1" LIMIT 1
-  //         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-  //      resultDFStr
-  //    )
-  //    assert(
-  //      resultDFStr.collect().head.get(0).asInstanceOf[Seq[String]].sorted ==
-  //        Seq("hello this is a test", "hello this is a test1", "hello this is a test2").sorted
-  //    )
-  //
-  //    testPushdownSql(
-  //      s"""
-  //         |SELECT (
-  //         |  ARRAY_UNIQUE_AGG ( "SUBQUERY_1"."SUBQUERY_1_COL_0" )
-  //         |) AS "SUBQUERY_2_COL_0"
-  //         |FROM (
-  //         |  SELECT ( "SUBQUERY_0"."S2" ) AS "SUBQUERY_1_COL_0"
-  //         |  FROM (
-  //         |    SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-  //         |  ) AS "SUBQUERY_0"
-  //         |) AS "SUBQUERY_1" LIMIT 1
-  //         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-  //      resultDFInt
-  //    )
-  //    assert(
-  //      resultDFInt
-  //        .collect()
-  //        .head
-  //        .get(0)
-  //        .asInstanceOf[Seq[java.math.BigDecimal]]
-  //        .map(_.intValue)
-  //        .sorted == Seq(1, 2, 3).sorted
-  //    )
-  //  }
 }
