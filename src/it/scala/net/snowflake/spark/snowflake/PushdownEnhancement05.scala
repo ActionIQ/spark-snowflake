@@ -1174,7 +1174,7 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
         col("id"),
         expr(
           "named_struct('a', s1_agg, 'b', s2_agg, 'c', i1_agg, 'd', i2_agg)"
-        ).alias("named_struct_cole"),
+        ).alias("named_struct_col"),
       )
     val expectedResult = Seq(
       Row(
@@ -1213,92 +1213,152 @@ class PushdownEnhancement05 extends IntegrationSuiteBase {
     )
   }
 
-//  test("AIQ test pushdown from_json") {
-//    jdbcUpdate(s"create or replace table $test_table_basic " +
-//      s"(id bigint, s string)")
-//    jdbcUpdate(s"insert into $test_table_basic values " +
-//      s"""
-//         |(1, '{"a":"hello1", "b":"test1", "c": 1}'),
-//         |(1, '{"a":"hello2", "b":"test2", "c": 2}'),
-//         |(1, '{"a":"hello2", "b":NULL, "c": 2}'),
-//         |(2, '{"a":"hello4", "b":"test4", "c": 4}'),
-//         |(2, '{"a":"hello5", "b":"test5", "c": 5}'),
-//         |(2, '{"a":"hello6", "b":NULL, "c": NULL}'),
-//         |(2, '{"a":NULL, "b":"test7", "c": NULL}')
-//         |""".stripMargin.linesIterator.mkString(" ").trim
-//    )
-//
-//    val tmpDF = sparkSession.read
-//      .format(SNOWFLAKE_SOURCE_NAME)
-//      .options(thisConnectorOptionsNoTable)
-//      .option("dbtable", test_table_basic)
-//      .load()
-//
-//    val resultDF = tmpDF
-//      .groupBy("id")
-//      .agg(expr("sort_array(collect_set(s)) as s_agg"))
-//      .select(
-//        col("id"),
-//        expr(
-//          s"""
-//             |cast(
-//             |  from_json(
-//             |    array_join(s_agg, ','),
-//             |    'ARRAY<STRUCT<a: STRING, b: STRING, c: BIGINT>>'
-//             |  ) as string
-//             |)""".stripMargin.linesIterator.mkString("").trim
-//        ).alias("from_json_s_str"),
-//      )
-//    val expectedResult = Seq(
-//      Row(
-//        BigDecimal(1),
-//        """
-//          |{
-//          |"value":
-//          |"{\"a\":\"hello1\", \"b\":\"test1\", \"c\": 1},
-//          |{\"a\":\"hello2\", \"b\":\"test2\", \"c\": 2},
-//          |{\"a\":\"hello2\", \"b\":NULL, \"c\": 2}"
-//          |}
-//          |""".stripMargin.linesIterator.mkString("").trim,
-//      ),
-//      Row(
-//        BigDecimal(2),
-//        """
-//          |{
-//          |"value":
-//          |"{\"a\":\"hello4\", \"b\":\"test4\", \"c\": 4},
-//          |{\"a\":\"hello5\", \"b\":\"test5\", \"c\": 5},
-//          |{\"a\":\"hello6\", \"b\":NULL, \"c\": NULL},
-//          |{\"a\":NULL, \"b\":\"test7\", \"c\": NULL}"
-//          |}
-//          |""".stripMargin.linesIterator.mkString("").trim,
-//      ),
-//    )
-//    testPushdown(
-//      s"""
-//         |SELECT
-//         |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
-//         |  (
-//         |    CAST (
-//         |      OBJECT_CONSTRUCT_KEEP_NULL (
-//         |        'value' ,
-//         |        ARRAY_TO_STRING (
-//         |          ARRAY_SORT (
-//         |            ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S" ) ,
-//         |            true , true
-//         |          ) ,
-//         |          ','
-//         |        )
-//         |      ) AS VARCHAR
-//         |    )
-//         |  ) AS "SUBQUERY_1_COL_1"
-//         |FROM (
-//         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
-//         |) AS "SUBQUERY_0"
-//         |GROUP BY "SUBQUERY_0"."ID"
-//         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
-//      resultDF,
-//      expectedResult,
-//    )
-//  }
+  test("AIQ test pushdown to_json") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"""
+         |(1, 'hello1', 'test1', 1, 2),
+         |(1, 'hello2', 'test2', 2, NULL),
+         |(1, 'hello2', NULL, 2, NULL),
+         |(2, 'hello4', 'test4', 4, 3),
+         |(2, 'hello5', 'test5', 5, NULL),
+         |(2, 'hello6', NULL, NULL, 6),
+         |(2, NULL, 'test7', NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDF = tmpDF
+      .groupBy("id")
+      .agg(
+        expr("sort_array(collect_set(s1)) as s1_agg"),
+        expr("sort_array(collect_set(s2)) as s2_agg"),
+        expr("sort_array(collect_set(i1)) as i1_agg"),
+        expr("sort_array(collect_set(i2)) as i2_agg"),
+      )
+      .select(
+        col("id"),
+        expr(
+          "to_json(named_struct('a', s1_agg, 'b', s2_agg, 'c', i1_agg, 'd', i2_agg))"
+        ).alias("to_json_col"),
+      )
+    val expectedResult = Seq(
+      Row(
+        BigDecimal(1),
+        """{"a":["hello1","hello2"],"b":["test1","test2"],"c":[1,2],"d":[2]}""",
+      ),
+      Row(
+        BigDecimal(2),
+        """{"a":["hello4","hello5","hello6"],"b":["test4","test5","test7"],"c":[4,5],"d":[3,6]}""",
+      ),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    TO_JSON (
+         |      OBJECT_CONSTRUCT_KEEP_NULL (
+         |        'a' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S1" ) , true , true ) ,
+         |        'b' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S2" ) , true , true ) ,
+         |        'c' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."I1" ) , true , true ) ,
+         |        'd' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."I2" ) , true , true )
+         |      )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1"
+         |FROM (
+         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |GROUP BY "SUBQUERY_0"."ID"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
+
+  test("AIQ test pushdown from_json") {
+    jdbcUpdate(s"create or replace table $test_table_basic " +
+      s"(id bigint, s1 string, s2 string, i1 bigint, i2 bigint)")
+    jdbcUpdate(s"insert into $test_table_basic values " +
+      s"""
+         |(1, 'hello1', 'test1', 1, 2),
+         |(1, 'hello2', 'test2', 2, NULL),
+         |(1, 'hello2', NULL, 2, NULL),
+         |(2, 'hello4', 'test4', 4, 3),
+         |(2, 'hello5', 'test5', 5, NULL),
+         |(2, 'hello6', NULL, NULL, 6),
+         |(2, NULL, 'test7', NULL, NULL)
+         |""".stripMargin.linesIterator.mkString(" ").trim
+    )
+
+    val tmpDF = sparkSession.read
+      .format(SNOWFLAKE_SOURCE_NAME)
+      .options(thisConnectorOptionsNoTable)
+      .option("dbtable", test_table_basic)
+      .load()
+
+    val resultDF = tmpDF
+      .groupBy("id")
+      .agg(
+        expr("sort_array(collect_set(s1)) as s1_agg"),
+        expr("sort_array(collect_set(s2)) as s2_agg"),
+        expr("sort_array(collect_set(i1)) as i1_agg"),
+        expr("sort_array(collect_set(i2)) as i2_agg"),
+      )
+      .select(
+        col("id"),
+        expr(
+          s"""from_json(
+             |  to_json(named_struct('a', s1_agg, 'b', s2_agg, 'c', i1_agg, 'd', i2_agg)),
+             |  'a ARRAY<STRING>, b ARRAY<STRING>, c ARRAY<BIGINT>, d ARRAY<BIGINT>'
+             |)
+             |""".stripMargin.linesIterator.mkString("").trim
+        ).alias("from_json_col"),
+      )
+    val expectedResult = Seq(
+      Row(
+        BigDecimal(1),
+        Row(Array("hello1", "hello2"), Array("test1", "test2"), Array(1, 2), Array(2)),
+      ),
+      Row(
+        BigDecimal(2),
+        Row(
+          Array("hello4", "hello5", "hello6"),
+          Array("test4", "test5", "test7"),
+          Array(4, 5),
+          Array(3, 6),
+        ),
+      ),
+    )
+    testPushdown(
+      s"""
+         |SELECT
+         |  ( "SUBQUERY_0"."ID" ) AS "SUBQUERY_1_COL_0" ,
+         |  (
+         |    PARSE_JSON (
+         |      TO_JSON (
+         |        OBJECT_CONSTRUCT_KEEP_NULL (
+         |          'a' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S1" ) , true , true ) ,
+         |          'b' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."S2" ) , true , true ) ,
+         |          'c' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."I1" ) , true , true ) ,
+         |          'd' , ARRAY_SORT ( ARRAY_AGG ( DISTINCT "SUBQUERY_0"."I2" ) , true , true )
+         |        )
+         |      )
+         |    )
+         |  ) AS "SUBQUERY_1_COL_1"
+         |FROM (
+         |  SELECT * FROM ( $test_table_basic ) AS "SF_CONNECTOR_QUERY_ALIAS"
+         |) AS "SUBQUERY_0"
+         |GROUP BY "SUBQUERY_0"."ID"
+         |""".stripMargin.linesIterator.map(_.trim).mkString(" ").trim,
+      resultDF,
+      expectedResult,
+    )
+  }
 }
