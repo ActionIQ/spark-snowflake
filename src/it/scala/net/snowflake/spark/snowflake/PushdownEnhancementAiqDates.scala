@@ -25,21 +25,13 @@ import java.sql.Timestamp
 import java.util.TimeZone
 
 // scalastyle:off println
-class PushdownEnhancement04 extends IntegrationSuiteBase {
+class PushdownEnhancementAiqDates extends IntegrationSuiteBase {
   private var thisConnectorOptionsNoTable: Map[String, String] = Map()
-  private val test_table_basic: String = s"test_basic_$randomSuffix"
-  private val test_table_number = s"test_table_number_$randomSuffix"
   private val test_table_date = s"test_table_date_$randomSuffix"
-  private val test_table_rank = s"test_table_rank_$randomSuffix"
-  private val test_table_string = s"test_table_string_$randomSuffix"
 
   override def afterAll(): Unit = {
     try {
-      jdbcUpdate(s"drop table if exists $test_table_basic")
-      jdbcUpdate(s"drop table if exists $test_table_number")
       jdbcUpdate(s"drop table if exists $test_table_date")
-      jdbcUpdate(s"drop table if exists $test_table_rank")
-      jdbcUpdate(s"drop table if exists $test_table_string")
     } finally {
       TestHook.disableTestHook()
       SnowflakeConnectorUtils.disablePushdownSession(sparkSession)
