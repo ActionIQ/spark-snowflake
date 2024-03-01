@@ -1,18 +1,11 @@
 package net.snowflake.spark.snowflake.pushdowns
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  EmptySnowflakeSQLStatement,
-  SnowflakeSQLStatement
-}
+import net.snowflake.spark.snowflake.{ConstantString, EmptySnowflakeSQLStatement, SnowflakeSQLStatement}
+
 import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Attribute,
-  Expression,
-  NamedExpression
-}
-import org.apache.spark.sql.types.MetadataBuilder
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, If, IsNull, Literal, NamedExpression, Or}
+import org.apache.spark.sql.types.{MetadataBuilder, NullType}
 import org.slf4j.LoggerFactory
 
 /** Package-level static methods and variable constants. These includes helper functions for
@@ -107,6 +100,7 @@ package object querygeneration {
       case AggregationStatement(stmt) => stmt
       case BasicStatement(stmt) => stmt
       case BooleanStatement(stmt) => stmt
+      case CollectionStatement(stmt) => stmt
       case CryptographicStatement(stmt) => stmt
       case DateStatement(stmt) => stmt
       case MiscStatement(stmt) => stmt
@@ -116,6 +110,39 @@ package object querygeneration {
       case UnsupportedStatement(stmt) => stmt
       // UnsupportedStatement must be the last CASE
     }
+  }
+
+  // Using this Expression to map the Spark-Snowflake function results 1-1
+  //  - Spark returns null if any of the inputs is null and a default value if no matches
+  //  - Snowflake returns null if any of the inputs is null AND for no matches
+  private[querygeneration] final def nullIntolerantExpr(
+    inputs: Seq[Expression],
+    default: Expression,
+  ): Expression = {
+    val isNullMappedInputs = inputs.map(IsNull)
+
+    val inputNullCheckExpr = if (isNullMappedInputs.size > 1) {
+      val firstInput = isNullMappedInputs.head
+      val secondInput = isNullMappedInputs.drop(1).head
+
+      isNullMappedInputs.drop(2).foldLeft(Or(firstInput, secondInput)) {
+        (currentExpr, newExpr) => Or(currentExpr, newExpr)
+      }
+    } else { isNullMappedInputs.head }
+
+    If(inputNullCheckExpr, Literal.default(NullType), default)
+  }
+
+  // Same as above, using this Statement to map the Spark-Snowflake function results 1-1
+  private[querygeneration] final def nullIntolerantStmt(
+    statement: SnowflakeSQLStatement,
+    defaultStmt: SnowflakeSQLStatement,
+  ): SnowflakeSQLStatement = {
+    // Wrapping statement in Coalesce to mimic Spark function's functionality in Snowflake
+    functionStatement(
+      "COALESCE",
+      Seq(statement, defaultStmt),
+    )
   }
 
   private[querygeneration] final def convertStatements(
@@ -149,6 +176,12 @@ package object querygeneration {
           Alias(expr, altName)(expr.exprId, Seq.empty[String], Some(metadata))
       }
     }
+  }
+
+  private[querygeneration] def optionalExprToFuncArg(
+    exprOpt: Option[Expression]
+  ): Seq[Expression] = {
+    exprOpt.map { expr => Seq(expr) }.getOrElse(Seq.empty)
   }
 
   private[querygeneration] def functionStatement(

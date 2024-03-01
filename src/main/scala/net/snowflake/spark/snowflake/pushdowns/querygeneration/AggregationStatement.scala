@@ -7,7 +7,9 @@ import net.snowflake.spark.snowflake.{
   SnowflakePushdownUnsupportedException,
   SnowflakeSQLStatement
 }
+
 import scala.language.postfixOps
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 
@@ -42,10 +44,20 @@ private[querygeneration] object AggregationStatement {
               // like mutableAggBufferOffset and inputAggBufferOffset
               ConstantString("HLL") +
                 blockStatement(convertStatements(fields, agg_fun.children: _*))
-            case _: CollectSet =>
+            case _: CollectList =>
+              // https://docs.snowflake.com/en/sql-reference/functions/array_agg
               functionStatement(
                 "ARRAY_AGG",
-                Seq(ConstantString("DISTINCT") + convertStatements(fields, agg_fun.children: _*))
+                Seq(convertStatements(fields, agg_fun.children: _*)),
+              )
+            case _: CollectSet =>
+              // scalastyle:off line.size.limit
+              // https://docs.snowflake.com/en/sql-reference/functions/array_agg
+              // https://community.snowflake.com/s/question/0D50Z00009bTcpkSAC/equivalent-of-collectset-in-hive
+              // scalastyle:on line.size.limit
+              functionStatement(
+                "ARRAY_AGG",
+                Seq(ConstantString("DISTINCT") + convertStatements(fields, agg_fun.children: _*)),
               )
             case _ =>
               // This exception is not a real issue. It will be caught in

@@ -43,14 +43,30 @@ trait QueryTest extends org.scalatest.funsuite.AnyFunSuite {
       // Java's java.math.BigDecimal.compareTo).
       // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
       // equality test.
-      val converted: Seq[Row] = answer.map { s =>
-        Row.fromSeq(s.toSeq.map {
-          case d: java.math.BigDecimal => BigDecimal(d)
-          case b: Array[Byte] => b.toSeq
-          case o => o
-        })
-      }
+      val converted: Seq[Row] = answer.map(prepareRow)
       if (!isSorted) converted.sortBy(_.toString()) else converted
+    }
+    // We need to call prepareRow recursively to handle schemas with struct types.
+    def prepareRow(row: Row): Row = {
+      Row.fromSeq(row.toSeq.map {
+        case null => null
+        case bd: java.math.BigDecimal => BigDecimal(bd)
+        // Equality of WrappedArray differs for AnyVal and AnyRef in Scala 2.12.2+
+        case seq: Seq[_] => seq.map {
+          case bd: java.math.BigDecimal => BigDecimal(bd)
+          case b: java.lang.Byte => b.byteValue
+          case s: java.lang.Short => s.shortValue
+          case i: java.lang.Integer => i.intValue
+          case l: java.lang.Long => l.longValue
+          case f: java.lang.Float => f.floatValue
+          case d: java.lang.Double => d.doubleValue
+          case x => x
+        }
+        // Convert array to Seq for easy equality check.
+        case b: Array[_] => b.toSeq
+        case r: Row => prepareRow(r)
+        case o => o
+      })
     }
     val sparkAnswer = try df.collect().toSeq
     catch {

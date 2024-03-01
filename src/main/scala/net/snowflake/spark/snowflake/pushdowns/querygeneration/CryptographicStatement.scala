@@ -2,19 +2,13 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake._
 
-import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  Cast,
-  Expression,
-  Md5,
-  Sha1,
-  Sha2
-}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Expression, Md5, Sha1, Sha2, XxHash64}
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
+import scala.language.postfixOps
+
 /**
- * Extractor for basic (attributes and literals) expressions.
+ * Extractor for cryptographic-style expressions.
  */
 private[querygeneration] object CryptographicStatement {
 
@@ -36,45 +30,49 @@ private[querygeneration] object CryptographicStatement {
 
     Option(expr match {
       // https://docs.snowflake.com/en/sql-reference/functions/md5
-      case Md5(child) =>
-        val args = child match {
+      case e: Md5 =>
+        val childExpr = e.child match {
           // Spark always casts child to binary, need to use string for Snowflake otherwise
           // we get: `The following string is not a legal hex-encoded value` error
-          case Cast(c, _: BinaryType, tZ, ansiEn) =>
-            Seq(convertStatement(Cast(c, StringType, tZ, ansiEn), fields))
-          case childWithoutCast =>
-            Seq(convertStatement(Cast(childWithoutCast, StringType), fields))
-        }
-        functionStatement("MD5", args)
-
-      // https://docs.snowflake.com/en/sql-reference/functions/sha1
-      case Sha1(child) =>
-        val args = child match {
-          // Spark always casts child to binary, need to use string for Snowflake otherwise
-          // we get: `The following string is not a legal hex-encoded value` error
-          case Cast(c, _: BinaryType, tZ, ansiEn) =>
-            Seq(convertStatement(Cast(c, StringType, tZ, ansiEn), fields))
-          case childWithoutCast =>
-            Seq(convertStatement(Cast(childWithoutCast, StringType), fields))
-        }
-        functionStatement("SHA1", args)
-
-      // https://docs.snowflake.com/en/sql-reference/functions/sha2
-      case Sha2(left, right) =>
-        val argsLeft = left match {
-          // Spark always casts child to binary, need to use string for Snowflake otherwise
-          // we get: `The following string is not a legal hex-encoded value` error
-          case Cast(l, _: BinaryType, tZ, ansiEn) =>
-            convertStatement(Cast(l, StringType, tZ, ansiEn), fields)
-          case lWithoutCast =>
-            convertStatement(Cast(lWithoutCast, StringType), fields)
+          case Cast(c, _: BinaryType, tZ, ansiEn) => Cast(c, StringType, tZ, ansiEn)
+          case childWithoutCast => Cast(childWithoutCast, StringType)
         }
         functionStatement(
-          "SHA2",
-          Seq(
-            argsLeft,
-            convertStatement(right, fields),
-          ),
+          expr.prettyName.toUpperCase,
+          Seq(convertStatement(childExpr, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/sha1
+      case e: Sha1 =>
+        val childExpr = e.child match {
+          // Spark always casts child to binary, need to use string for Snowflake otherwise
+          // we get: `The following string is not a legal hex-encoded value` error
+          case Cast(c, _: BinaryType, tZ, ansiEn) => Cast(c, StringType, tZ, ansiEn)
+          case childWithoutCast => Cast(childWithoutCast, StringType)
+        }
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(convertStatement(childExpr, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/sha2
+      case e: Sha2 =>
+        val leftExpr = e.left match {
+          // Spark always casts child to binary, need to use string for Snowflake otherwise
+          // we get: `The following string is not a legal hex-encoded value` error
+          case Cast(l, _: BinaryType, tZ, ansiEn) => Cast(l, StringType, tZ, ansiEn)
+          case lWithoutCast => Cast(lWithoutCast, StringType)
+        }
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(leftExpr, e.right).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/hash
+      case e: XxHash64 =>
+        functionStatement(
+          "HASH",
+          Seq(convertStatements(fields, e.children: _*)),
         )
 
       case _ => null

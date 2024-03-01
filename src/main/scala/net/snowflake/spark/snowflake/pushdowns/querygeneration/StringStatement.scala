@@ -1,40 +1,25 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Ascii,
-  Attribute,
-  Cast,
-  Concat,
-  ConcatWs,
-  Expression,
-  FormatNumber,
-  Length,
-  Like,
-  Literal,
-  Lower,
-  Reverse,
-  StringInstr,
-  StringLPad,
-  StringRPad,
-  StringTranslate,
-  StringTrim,
-  StringTrimLeft,
-  StringTrimRight,
-  Substring,
-  Upper,
-  Uuid
-}
+import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
+
+import org.apache.commons.lang.StringEscapeUtils
+import org.apache.spark.sql.catalyst.expressions.{Ascii, Attribute, Cast, Concat, ConcatWs, Expression, FormatNumber, Length, Like, Literal, Lower, RLike, RegExpExtract, RegExpExtractAll, RegExpReplace, Reverse, StringInstr, StringLPad, StringRPad, StringReplace, StringTranslate, StringTrim, StringTrimBoth, StringTrimLeft, StringTrimRight, Substring, ToNumber, Upper, Uuid}
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractor for boolean expressions (return true or false). */
 private[querygeneration] object StringStatement {
   // ESCAPE CHARACTER for LIKE is supported from Spark 3.0
   // The default escape character comes from the constructor of Like class.
   private val DEFAULT_LIKE_ESCAPE_CHAR: Char = '\\'
+
+  // RegExpExtract and RegExpExtractAll Snowflake Defaults non-existent in Spark
+  private val Seq(position, occurrence, regex_parameters) = Seq.fill(2)(Literal(1)) ++ Seq(Literal("c"))
+
+  // We need Java escape rules for the regex not Scala ones
+  private def patternStrToJavaEscapedRegExpr(pattern: UTF8String): Expression =
+    Literal(StringEscapeUtils.escapeJava(pattern.toString))
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
     * a tuple of (Expression, Seq[Attribute]) representing the expression to
@@ -115,22 +100,91 @@ private[querygeneration] object StringStatement {
           fields
         ) + escapeClause
 
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr
+      case RegExpExtract(subject, Literal(pattern: UTF8String, StringType), idx) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
+        val regExpExtractStmt = functionStatement(
+          "REGEXP_SUBSTR",
+          Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
+          .map(convertStatement(_, fields)),
+        )
+
+        nullIntolerantStmt(
+          regExpExtractStmt,
+          convertStatement(nullIntolerantExpr(Seq(subject, regExpr, idx), Literal("")), fields),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_substr_all
+      case RegExpExtractAll(subject, Literal(pattern: UTF8String, StringType), idx) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
+        functionStatement(
+          "REGEXP_SUBSTR_ALL",
+          Seq(subject, regExpr, position, occurrence, regex_parameters, idx)
+            .map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_replace
+      case RegExpReplace(subject, Literal(pattern: UTF8String, StringType), rep, pos) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(subject, regExpr, rep, pos).map(convertStatement(_, fields)),
+        )
+
       // https://docs.snowflake.com/en/sql-reference/functions/reverse
       // Reverse in Snowflake only supports StringType and DateType.
       // Spark only supports StringType and ArrayType, thus we only
       // implement for StringType
-      case Reverse(child) =>
-        child.dataType match {
-          case _: StringType =>
-            functionStatement(
-              expr.prettyName.toUpperCase,
-              Seq(convertStatement(child, fields)),
-            )
-          case _ => null
-        }
+      case e: Reverse if e.child.dataType.isInstanceOf[StringType] =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(convertStatement(e.child, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/regexp_like
+      case RLike(left, Literal(pattern: UTF8String, StringType)) =>
+        val regExpr = patternStrToJavaEscapedRegExpr(pattern)
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(left, regExpr).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/replace
+      case e: StringReplace =>
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          Seq(e.srcExpr, e.searchExpr, e.replaceExpr).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/trim
+      case e: StringTrimBoth =>
+        functionStatement(
+          "TRIM",
+          (Seq(e.srcStr) ++ optionalExprToFuncArg(e.trimStr)).map(convertStatement(_, fields)),
+        )
+
+      // https://docs.snowflake.com/en/sql-reference/functions/to_decimal
+      case e: ToNumber if e.right.foldable =>
+        val fmt = e.right.eval().toString
+        // `errorOnFail` does not matter for the usage of `ToNumberParser` here
+        val numParser = new ToNumberParser(fmt, errorOnFail = false)
+
+        val precision = numParser.parsedDecimalType.precision
+        // In Snowflake cannot be higher that the maximum precision (38) -1
+        val scale = if (numParser.parsedDecimalType.scale > 37) 37 else numParser.parsedDecimalType.scale
+
+        functionStatement(
+          expr.prettyName.toUpperCase,
+          (Seq(e.left) ++ Seq(fmt, precision, scale).map(Literal(_)))
+            .map(convertStatement(_, fields)),
+        )
 
       // https://docs.snowflake.com/en/sql-reference/functions/uuid_string
-      case _: Uuid => functionStatement("UUID_STRING", Seq())
+      case _: Uuid => functionStatement("UUID_STRING", Seq.empty)
 
       // https://docs.snowflake.com/en/sql-reference/functions/trim
       // https://docs.snowflake.com/en/sql-reference/functions/to_decimal

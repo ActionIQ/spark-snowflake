@@ -1,35 +1,9 @@
 package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
-import net.snowflake.spark.snowflake.{
-  ConstantString,
-  EmptySnowflakeSQLStatement,
-  IntVariable,
-  SnowflakeFailMessage,
-  SnowflakePushdownUnsupportedException,
-  SnowflakeSQLStatement
-}
-import org.apache.spark.sql.catalyst.expressions.{
-  Alias,
-  Ascending,
-  Attribute,
-  CaseWhen,
-  Cast,
-  Coalesce,
-  Decode,
-  Descending,
-  Expression,
-  If,
-  In,
-  InSet,
-  Literal,
-  MakeDecimal,
-  ScalarSubquery,
-  ShiftLeft,
-  ShiftRight,
-  SortOrder,
-  UnscaledValue
-}
-import org.apache.spark.sql.types.{Decimal, _}
+import net.snowflake.spark.snowflake._
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CaseWhen, Cast, Coalesce, Decode, Descending, Expression, If, In, InSet, Literal, MakeDecimal, ScalarSubquery, ShiftLeft, ShiftRight, SortOrder, UnscaledValue}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Extractors for everything else. */
@@ -147,6 +121,7 @@ private[querygeneration] object MiscStatement {
             )
           )
 
+      // https://docs.snowflake.com/en/sql-reference/functions/decode
       case Decode(params, replacement) =>
         ConstantString(expr.prettyName.toUpperCase) +
           blockStatement(convertStatements(fields, params ++ Seq(replacement): _*))

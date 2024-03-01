@@ -2,38 +2,13 @@ package net.snowflake.spark.snowflake.pushdowns.querygeneration
 
 import net.snowflake.spark.snowflake.{ConstantString, SnowflakeSQLStatement}
 
-import scala.language.postfixOps
-import org.apache.spark.sql.catalyst.expressions.{
-  Abs,
-  Acos,
-  Asin,
-  Atan,
-  Attribute,
-  Ceil,
-  CheckOverflow,
-  Cos,
-  Cosh,
-  Exp,
-  Expression,
-  Floor,
-  Greatest,
-  Least,
-  Log,
-  Logarithm,
-  Pi,
-  Pow,
-  PromotePrecision,
-  Rand,
-  Round,
-  Sin,
-  Sinh,
-  Sqrt,
-  Tan,
-  Tanh,
-  UnaryMinus
-}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Acos, Asin, Atan, Attribute, Ceil, CheckOverflow, Cos, Cosh, Exp, Expression, Floor, Greatest, Least, Log, Logarithm, Pi, Pow, PromotePrecision, Rand, Round, Sin, Sinh, Sqrt, Tan, Tanh, UnaryMinus}
 
-/** Extractor for boolean expressions (return true or false). */
+import scala.language.postfixOps
+
+/**
+ * Extractor for numeric-style expressions.
+ */
 private[querygeneration] object NumericStatement {
 
   /** Used mainly by QueryGeneration.convertExpression. This matches
