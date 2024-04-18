@@ -290,7 +290,8 @@ private[snowflake] case class SnowflakeRelation(
         resultSetSerializables,
         params.proxyInfo,
         queryID,
-        params.sfFullURL
+        params.sfFullURL,
+        Some(startTime)
       )
     } finally {
       conn.close()

@@ -37,7 +37,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
   resultSets: Array[SnowflakeResultSetSerializable],
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String
+  sfFullURL: String,
+  submissionTime: Option[Long]
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
@@ -50,7 +51,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
       queryID,
-      sfFullURL
+      sfFullURL,
+      submissionTime
     )
   }
 
@@ -67,7 +69,8 @@ case class ResultIterator[T: ClassTag](
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String
+  sfFullURL: String,
+  querySubmissionTime: Option[Long]
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -148,8 +151,13 @@ case class ResultIterator[T: ClassTag](
       return currentRowNotConsumedYet
     }
 
+    var firstRowReadAt = 0L
+
     try {
       if (data.next()) {
+        if (actualReadRowCount == 0) {
+          firstRowReadAt = System.currentTimeMillis()
+        }
         // Move to the current row in the ResultSet, but it is not consumed yet.
         currentRowNotConsumedYet = true
         true
@@ -174,6 +182,19 @@ case class ResultIterator[T: ClassTag](
                | the expected row count $expectedRowCount for partition
                | ID:$partitionIndex. Related query ID is $queryID
                |""".stripMargin.filter(_ >= ' '))
+        }
+        val lastRowReadAt = System.currentTimeMillis()
+        querySubmissionTime match {
+          case Some(querySubmissionTime) =>
+            SnowflakeResultSetRDD.logger.info(
+              s"""Statistics:
+                 | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
+                 | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
+                 | warehouse_total_time=${lastRowReadAt - querySubmissionTime} ms
+                 | data_source=snowflake
+                 |""".stripMargin
+            )
+          case _ =>
         }
         false
       }
