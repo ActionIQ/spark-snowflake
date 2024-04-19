@@ -190,7 +190,6 @@ case class ResultIterator[T: ClassTag](
               s"""Statistics:
                  | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
                  | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
-                 | warehouse_total_time=${lastRowReadAt - querySubmissionTime} ms
                  | data_source=snowflake
                  |""".stripMargin
             )
