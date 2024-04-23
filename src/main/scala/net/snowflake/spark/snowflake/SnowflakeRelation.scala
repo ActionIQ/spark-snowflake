@@ -284,14 +284,16 @@ private[snowflake] case class SnowflakeRelation(
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
 
+      val sc = sqlContext.sparkContext
+      sc.setLocalProperty("querySubmissionTime", startTime.toString)
+
       new SnowflakeResultSetRDD[T](
         resultSchema,
-        sqlContext.sparkContext,
+        sc,
         resultSetSerializables,
         params.proxyInfo,
         queryID,
-        params.sfFullURL,
-        Some(startTime)
+        params.sfFullURL
       )
     } finally {
       conn.close()

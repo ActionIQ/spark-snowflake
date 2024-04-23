@@ -37,8 +37,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
   resultSets: Array[SnowflakeResultSetSerializable],
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String,
-  submissionTime: Option[Long]
+  sfFullURL: String
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
@@ -47,12 +46,12 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
     ResultIterator[T](
       schema,
+      sc,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
       queryID,
-      sfFullURL,
-      submissionTime
+      sfFullURL
     )
   }
 
@@ -65,12 +64,12 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
   schema: StructType,
+  sc: SparkContext,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String,
-  querySubmissionTime: Option[Long]
+  sfFullURL: String
 ) extends Iterator[T] {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
@@ -184,12 +183,13 @@ case class ResultIterator[T: ClassTag](
                |""".stripMargin.filter(_ >= ' '))
         }
         val lastRowReadAt = System.currentTimeMillis()
+        val querySubmissionTime = Some(sc.getLocalProperty("querySubmissionTime"))
         querySubmissionTime match {
           case Some(querySubmissionTime) =>
             SnowflakeResultSetRDD.logger.info(
               s"""Statistics:
                  | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
-                 | warehouse_query_latency=${firstRowReadAt - querySubmissionTime} ms
+                 | warehouse_query_latency=${firstRowReadAt - querySubmissionTime.toLong} ms
                  | data_source=snowflake
                  |""".stripMargin
             )
