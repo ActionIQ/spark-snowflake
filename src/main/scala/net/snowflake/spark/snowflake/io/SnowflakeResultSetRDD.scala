@@ -46,7 +46,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
     ResultIterator[T](
       schema,
-      sc,
+      Some(context.getLocalProperty("querySubmissionTime")),
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
@@ -64,7 +64,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
   schema: StructType,
-  sc: SparkContext,
+  querySubmittedAt: Option[String],
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
@@ -81,6 +81,7 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
+  var firstRowReadAt = 0L
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = {
@@ -150,11 +151,9 @@ case class ResultIterator[T: ClassTag](
       return currentRowNotConsumedYet
     }
 
-    var firstRowReadAt = 0L
-
     try {
       if (data.next()) {
-        if (actualReadRowCount == 0) {
+        if (actualReadRowCount == 0L) {
           firstRowReadAt = System.currentTimeMillis()
         }
         // Move to the current row in the ResultSet, but it is not consumed yet.
@@ -183,13 +182,12 @@ case class ResultIterator[T: ClassTag](
                |""".stripMargin.filter(_ >= ' '))
         }
         val lastRowReadAt = System.currentTimeMillis()
-        val querySubmissionTime = Some(sc.getLocalProperty("querySubmissionTime"))
-        querySubmissionTime match {
-          case Some(querySubmissionTime) =>
+        querySubmittedAt match {
+          case Some(querySubmittedAt) =>
             SnowflakeResultSetRDD.logger.info(
               s"""Statistics:
                  | warehouse_read_latency=${lastRowReadAt - firstRowReadAt} ms
-                 | warehouse_query_latency=${firstRowReadAt - querySubmissionTime.toLong} ms
+                 | warehouse_query_latency=${firstRowReadAt - querySubmittedAt.toLong} ms
                  | data_source=snowflake
                  |""".stripMargin
             )
