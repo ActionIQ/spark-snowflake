@@ -189,6 +189,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.setLastSelect(statement.toString)
       log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
 
+      val querySubmissionTime = java.time.Instant.now()
       val startTime = System.currentTimeMillis()
       val (resultSet, queryID, serializables) = try {
         if (params.isExecuteQueryWithSyncMode) {
@@ -284,12 +285,11 @@ private[snowflake] case class SnowflakeRelation(
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
 
-      val sc = sqlContext.sparkContext
-      sc.setLocalProperty("querySubmissionTime", startTime.toString)
+      sqlContext.sparkContext.setLocalProperty("querySubmissionTime", querySubmissionTime.toString)
 
       new SnowflakeResultSetRDD[T](
         resultSchema,
-        sc,
+        sqlContext.sparkContext,
         resultSetSerializables,
         params.proxyInfo,
         queryID,
