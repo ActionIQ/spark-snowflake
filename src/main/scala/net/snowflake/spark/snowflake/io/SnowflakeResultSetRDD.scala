@@ -187,7 +187,7 @@ case class ResultIterator[T: ClassTag](
               "warehouse_query_latency_millis" ->
                 s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
               "data_source" -> "snowflake",
-              "query_submission_time" -> querySubmissionTime.toString,
+              "query_submitted_at" -> querySubmissionTime.toString,
               "first_row_read_at"-> firstRowReadAt.toString,
               "last_row_read_at" -> lastRowReadAt.toString,
             )
