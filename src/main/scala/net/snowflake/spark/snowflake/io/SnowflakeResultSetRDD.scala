@@ -190,7 +190,7 @@ case class ResultIterator[T: ClassTag](
               "first_row_read_at"-> firstRowReadAt.toString,
               "last_row_read_at" -> lastRowReadAt.toString,
             )
-            SparkContext.emitLog(tags)
+            context.emitLog(tags)
           case _ =>
         }
         false
