@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-val sparkVersion = "3-3-2-aiq88"
+val sparkVersion = "3-3-2-aiq89"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
