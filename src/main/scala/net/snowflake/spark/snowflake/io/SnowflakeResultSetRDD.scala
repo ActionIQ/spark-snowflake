@@ -15,7 +15,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.slf4j.LoggerFactory
 
-import java.time.Duration
+import java.time.{Duration, Instant}
 import java.time.format.DateTimeFormatter
 import scala.reflect.ClassTag
 
@@ -75,7 +75,7 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
-  var firstRowReadAt = java.time.Instant.now()
+  var firstRowReadAt: Option[Instant] = None
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = {
@@ -148,7 +148,7 @@ case class ResultIterator[T: ClassTag](
     try {
       if (data.next()) {
         if (actualReadRowCount == 0L) {
-          firstRowReadAt = java.time.Instant.now()
+          firstRowReadAt = Option(Instant.now())
         }
         // Move to the current row in the ResultSet, but it is not consumed yet.
         currentRowNotConsumedYet = true
@@ -175,11 +175,11 @@ case class ResultIterator[T: ClassTag](
                | ID:$partitionIndex. Related query ID is $queryID
                |""".stripMargin.filter(_ >= ' '))
         }
-        val lastRowReadAt = java.time.Instant.now()
-        Some(context.getLocalProperty("querySubmissionTime")) match {
-          case Some(t) =>
+        val lastRowReadAt = Instant.now()
+        (Some(context.getLocalProperty("querySubmissionTime")), firstRowReadAt) match {
+          case (Some(t), Some(firstRowReadAt)) =>
             val formatter = DateTimeFormatter.ISO_INSTANT
-            val querySubmissionTime = java.time.Instant.from(formatter.parse(t))
+            val querySubmissionTime = Instant.from(formatter.parse(t))
             val tags = Map(
               "warehouse_read_latency_millis" ->
                 s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
