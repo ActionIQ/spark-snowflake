@@ -189,7 +189,6 @@ case class ResultIterator[T: ClassTag](
               "query_submitted_at" -> querySubmissionTime.toString,
               "first_row_read_at"-> firstRowReadAt.toString,
               "last_row_read_at" -> lastRowReadAt.toString,
-              "row_count" -> actualReadRowCount.toString,
             )
             context.emitLog(tags)
           case _ =>
