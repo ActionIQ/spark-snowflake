@@ -176,7 +176,7 @@ case class ResultIterator[T: ClassTag](
                |""".stripMargin.filter(_ >= ' '))
         }
         val lastRowReadAt = Instant.now()
-        (Some(context.getLocalProperty("querySubmissionTime")), firstRowReadAt) match {
+        (Option(context.getLocalProperty("querySubmissionTime")), firstRowReadAt) match {
           case (Some(t), Some(firstRowReadAt)) =>
             val formatter = DateTimeFormatter.ISO_INSTANT
             val querySubmissionTime = Instant.from(formatter.parse(t))
