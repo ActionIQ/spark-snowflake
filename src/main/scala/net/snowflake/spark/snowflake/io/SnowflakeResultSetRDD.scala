@@ -2,18 +2,10 @@ package net.snowflake.spark.snowflake.io
 
 import java.sql.ResultSet
 import java.util.Properties
-
 import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, SnowflakeSQLException}
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import net.snowflake.spark.snowflake.{
-  Conversions,
-  ProxyInfo,
-  SnowflakeConnectorException,
-  SnowflakeTelemetry,
-  SparkConnectorContext,
-  TelemetryConstValues
-}
+import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -23,6 +15,8 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.slf4j.LoggerFactory
 
+import java.time.{Duration, Instant}
+import java.time.format.DateTimeFormatter
 import scala.reflect.ClassTag
 
 object SnowflakeResultSetRDD {
@@ -46,6 +40,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
     ResultIterator[T](
       schema,
+      context,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
@@ -63,6 +58,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
   schema: StructType,
+  context: TaskContext,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
@@ -79,6 +75,7 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
+  var firstRowReadAt: Option[Instant] = None
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = {
@@ -150,6 +147,9 @@ case class ResultIterator[T: ClassTag](
 
     try {
       if (data.next()) {
+        if (actualReadRowCount == 0L) {
+          firstRowReadAt = Option(Instant.now())
+        }
         // Move to the current row in the ResultSet, but it is not consumed yet.
         currentRowNotConsumedYet = true
         true
@@ -174,6 +174,26 @@ case class ResultIterator[T: ClassTag](
                | the expected row count $expectedRowCount for partition
                | ID:$partitionIndex. Related query ID is $queryID
                |""".stripMargin.filter(_ >= ' '))
+        }
+        val lastRowReadAt = Instant.now()
+        (Option(context.getLocalProperty("querySubmissionTime")), firstRowReadAt) match {
+          case (Some(t), Some(firstRowReadAt)) =>
+            val formatter = DateTimeFormatter.ISO_INSTANT
+            val querySubmissionTime = Instant.from(formatter.parse(t))
+            val tags = Map(
+              "warehouse_read_latency_millis" ->
+                s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
+              "warehouse_query_latency_millis" ->
+                s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
+              "data_source" -> "snowflake",
+              "query_submitted_at" -> querySubmissionTime.toString,
+              "first_row_read_at"-> firstRowReadAt.toString,
+              "last_row_read_at" -> lastRowReadAt.toString,
+              "row_count" -> actualReadRowCount.toString,
+            )
+            context.emitLog(tags)
+          case _ =>
+            SnowflakeResultSetRDD.logger.warn("querySubmissionTime not found in TaskContext")
         }
         false
       }

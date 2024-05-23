@@ -18,7 +18,6 @@
 package net.snowflake.spark.snowflake
 
 import java.io.{PrintWriter, StringWriter}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -34,6 +33,7 @@ import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 
+import java.time.Instant
 import scala.collection.JavaConverters
 
 /** Data Source API implementation for Amazon Snowflake database tables */
@@ -189,6 +189,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.setLastSelect(statement.toString)
       log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
 
+      val querySubmissionTime = Instant.now()
       val startTime = System.currentTimeMillis()
       val (resultSet, queryID, serializables) = try {
         if (params.isExecuteQueryWithSyncMode) {
@@ -283,6 +284,8 @@ private[snowflake] case class SnowflakeRelation(
 
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
+
+      sqlContext.sparkContext.setLocalProperty("querySubmissionTime", querySubmissionTime.toString)
 
       new SnowflakeResultSetRDD[T](
         resultSchema,
