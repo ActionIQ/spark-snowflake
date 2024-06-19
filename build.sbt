@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-val sparkVersion = "3-3-2-aiq88"
+val sparkVersion = "3-3-2-aiq90"
 val testSparkVersion = sys.props.get("spark.testVersion").getOrElse(sparkVersion)
 val defaultScalaVersion = "2.12.15"
 
 // increment this version when making a new release
-val sparkConnectorVersion = "2.11.3-aiq13"
+val sparkConnectorVersion = "2.11.3-aiq14"
 
 lazy val ItTest = config("it") extend Test
 
