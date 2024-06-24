@@ -113,6 +113,11 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
+
+    if (sqlContext.sparkContext.connectorTelemetryPushDownStrategyFailed.get()) {
+      sqlContext.sparkContext.connectorTelemetryNumOfFailedPushDownQueries.getAndIncrement()
+    }
+
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Snowflake
       // rather than unloading data.
