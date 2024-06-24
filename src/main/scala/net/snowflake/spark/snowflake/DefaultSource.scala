@@ -19,6 +19,8 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.streaming.SnowflakeSink
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
+import org.apache.spark.ConnectorTelemetryHelpers
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -50,6 +52,27 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     */
   def this() = this(DefaultJDBCWrapper)
 
+  private def initializeRelation(sqlContext: SQLContext): Unit = {
+    val sparkContext = sqlContext.sparkSession.sparkContext
+
+    sparkContext.setLocalProperty("dataWarehouse", "snowflake")
+
+    if (!sparkContext.connectorTelemetryListener.get()) {
+      sparkContext.addSparkListener(new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          try {
+            sparkContext.emitMetricsLog(
+              ConnectorTelemetryHelpers.compileOnApplicationEndLogMap(sparkContext)
+            )
+          } finally {
+            super.onApplicationEnd(applicationEnd)
+          }
+        }
+      })
+      sparkContext.connectorTelemetryListener.set(true)
+    }
+  }
+
   /**
     * Create a new `SnowflakeRelation` instance using parameters from Spark SQL DDL.
     * Resolves the schema using JDBC connection over provided URL, which must contain credentials.
@@ -65,6 +88,8 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     }
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
+
+    initializeRelation(sqlContext)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
 
@@ -83,6 +108,8 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     }
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
+
+    initializeRelation(sqlContext)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
 
@@ -143,6 +170,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     }
 
+    initializeRelation(sqlContext)
     createRelation(sqlContext, parameters)
   }
 

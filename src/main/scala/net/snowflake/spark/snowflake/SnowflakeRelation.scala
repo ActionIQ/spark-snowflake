@@ -32,6 +32,8 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
+import org.apache.spark.ConnectorTelemetryHelpers
+import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
 
 import java.time.Instant
 import scala.collection.JavaConverters
@@ -183,20 +185,34 @@ private[snowflake] case class SnowflakeRelation(
     resultSchema: StructType
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
+
+    val telemetryMetrics = ConnectorTelemetryHelpers.initializeConnectorTelemetry(
+      sqlContext.sparkContext,
+      Some("SnowflakeResultSetRDD")
+    )
+
     try {
       Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
       Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
       Utils.setLastSelect(statement.toString)
-      log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
+      log.info(
+        ConnectorTelemetryHelpers.eventNameLogTagger(
+          s"Now executing below command to read from snowflake:\n${statement.toString}"
+        )
+      )
 
-      val querySubmissionTime = Instant.now()
+      telemetryMetrics.setQuerySubmissionTime()
       val startTime = System.currentTimeMillis()
       val (resultSet, queryID, serializables) = try {
         if (params.isExecuteQueryWithSyncMode) {
           val rs = statement.execute(bindVariableEnabled = false)(conn)
           val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
-          log.info(s"The query ID for reading from snowflake is: $queryID; " +
-            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+          log.info(
+            ConnectorTelemetryHelpers.eventNameLogTagger(
+              s"The query ID for reading from snowflake is: $queryID; " +
+                s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
+            )
+          )
           val objects = rs
             .asInstanceOf[SnowflakeResultSet]
             .getResultSetSerializables(params.expectedPartitionSize)
@@ -204,8 +220,12 @@ private[snowflake] case class SnowflakeRelation(
         } else {
           val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-          log.info(s"The query ID for async reading from snowflake is: $queryID; " +
-            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
+          log.info(
+            ConnectorTelemetryHelpers.eventNameLogTagger(
+              s"The query ID for async reading from snowflake is: $queryID; " +
+                s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
+            )
+          )
           SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
           // The query is executed in async mode, getResultSetSerializables() is blocked
           // until query is done.
@@ -285,7 +305,7 @@ private[snowflake] case class SnowflakeRelation(
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
 
-      sqlContext.sparkContext.setLocalProperty("querySubmissionTime", querySubmissionTime.toString)
+      telemetryMetrics.setQueryId(Some(queryID))
 
       new SnowflakeResultSetRDD[T](
         resultSchema,
@@ -293,7 +313,8 @@ private[snowflake] case class SnowflakeRelation(
         resultSetSerializables,
         params.proxyInfo,
         queryID,
-        params.sfFullURL
+        params.sfFullURL,
+        telemetryMetrics
       )
     } finally {
       conn.close()
@@ -319,22 +340,34 @@ private[snowflake] case class SnowflakeRelation(
     }
 
     val partitionCount = resultSetSerializables.length
-    log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
-         | partitionCount=$partitionCount rowCount=$totalRowCount
-         | compressSize=${Utils.getSizeString(totalCompressedSize)}
-         | unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
-         | QueryTime=${Utils.getTimeString(queryTimeInMs)} QueryID=$queryID
-         |""".stripMargin.filter(_ >= ' '))
+    log.info(
+      ConnectorTelemetryHelpers.eventNameLogTagger(
+        // scalastyle:off line.size.limit
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.partitionCount=$partitionCount
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.readRowCount=$totalRowCount
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(totalCompressedSize)}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.QueryTime=${Utils.getTimeString(queryTimeInMs)}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.QueryID=$queryID
+           |""".stripMargin.linesIterator.mkString(" ")
+        // scalastyle:on line.size.limit
+      )
+    )
 
     val aveCount = totalRowCount / partitionCount
     val aveCompressSize = totalCompressedSize / partitionCount
     val aveUnCompressSize = totalUnCompressedSize / partitionCount
     log.info(
-      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Average statistics per partition: rowCount=$aveCount
-         | compressSize=${Utils.getSizeString(aveCompressSize)}
-         | unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
-         |""".stripMargin.filter(_ >= ' ')
+      ConnectorTelemetryHelpers.eventNameLogTagger(
+        // scalastyle:off line.size.limit
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.rowCount=$aveCount
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(aveCompressSize)}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
+           |""".stripMargin.linesIterator.mkString(" ")
+        // scalastyle:on line.size.limit
+      )
     )
     (totalRowCount, totalCompressedSize)
   }

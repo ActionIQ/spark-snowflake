@@ -11,8 +11,9 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
+import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.{SparkConf, SparkEnv, TaskContext}
+import org.apache.spark.{ConnectorTelemetryHelpers, SparkConf, SparkEnv, TaskContext}
 
 object SnowflakeTelemetry {
 
@@ -271,10 +272,14 @@ object SnowflakeTelemetry {
                              exception: SnowflakePushdownUnsupportedException)
   : Unit = {
     logger.info(
-      s"""Pushdown fails because of operation: ${exception.unsupportedOperation}
-         | message: ${exception.getMessage}
-         | isKnown: ${exception.isKnownUnsupportedOperation}
-           """.stripMargin)
+      ConnectorTelemetryHelpers.failureLogTagger(
+        s"""Pushdown fails because of
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.operation=${exception.unsupportedOperation}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.message=${exception.getMessage}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.isKnown=${exception.isKnownUnsupportedOperation}
+           |""".stripMargin.linesIterator.mkString(" ")
+      )
+    )
 
     // Don't send telemetry message for known unsupported operations.
     if (exception.isKnownUnsupportedOperation) {

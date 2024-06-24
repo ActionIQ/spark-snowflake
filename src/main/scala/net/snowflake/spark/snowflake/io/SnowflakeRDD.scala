@@ -1,10 +1,10 @@
 package net.snowflake.spark.snowflake.io
 
 import java.io.InputStream
-
 import net.snowflake.spark.snowflake.SparkConnectorContext
 import net.snowflake.spark.snowflake.io.SupportedFormat.SupportedFormat
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
+import org.apache.spark.{ConnectorTelemetryHelpers, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 
 class SnowflakeRDD(sc: SparkContext,
@@ -32,10 +32,15 @@ class SnowflakeRDD(sc: SparkContext,
     })
 
     logger.info(
-      s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
-         | partition ID:${snowflakePartition.index}
-         | totalFileCount=${snowflakePartition.fileNames.size}
-         |""".stripMargin.filter(_ >= ' '))
+      ConnectorTelemetryHelpers.eventNameLogTagger(
+        // scalastyle:off line.size.limit
+        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.partitionId=${snowflakePartition.index}
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.totalFileCount=${snowflakePartition.fileNames.size}
+           |""".stripMargin.linesIterator.mkString(" ")
+        // scalastyle:on line.size.limit
+      )
+    )
 
     stringIterator
   }
@@ -49,11 +54,16 @@ class SnowflakeRDD(sc: SparkContext,
     fileCountPerPartition = Math.min(MAX_FILES_PER_PARTITION, fileCountPerPartition)
     val fileCount = fileNames.length
     val partitionCount = (fileCount + fileCountPerPartition - 1) / fileCountPerPartition
-    logger.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
-         | fileCount=$fileCount filePerPartition=$fileCountPerPartition
-         | actualPartitionCount=$partitionCount
-         | expectedPartitionCount=$expectedPartitionCount
-         |""".stripMargin.filter(_ >= ' '))
+    logger.info(
+      ConnectorTelemetryHelpers.eventNameLogTagger(
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.fileCount=$fileCount
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.filePerPartition=$fileCountPerPartition
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.actualPartitionCount=$partitionCount
+           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.expectedPartitionCount=$expectedPartitionCount
+           |""".stripMargin.linesIterator.mkString(" ")
+      )
+    )
 
     if (fileNames.nonEmpty) {
       fileNames
