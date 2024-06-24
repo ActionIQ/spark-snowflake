@@ -170,7 +170,6 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
 
     }
 
-    initializeRelation(sqlContext)
     createRelation(sqlContext, parameters)
   }
 

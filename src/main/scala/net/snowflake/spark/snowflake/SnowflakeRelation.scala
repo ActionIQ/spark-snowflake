@@ -35,7 +35,6 @@ import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import org.apache.spark.ConnectorTelemetryHelpers
 import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
 
-import java.time.Instant
 import scala.collection.JavaConverters
 
 /** Data Source API implementation for Amazon Snowflake database tables */
