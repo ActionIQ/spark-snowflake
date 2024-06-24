@@ -41,7 +41,6 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
     ResultIterator[T](
       schema,
-      context,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
@@ -60,7 +59,6 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
   schema: StructType,
-  context: TaskContext,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
@@ -135,7 +133,7 @@ case class ResultIterator[T: ClassTag](
   var currentRowNotConsumedYet: Boolean = false
   var resultSetIsClosed: Boolean = false
 
-  TaskContext.get().addTaskCompletionListener[Unit]{ _ =>
+  TaskContext.get().addTaskCompletionListener[Unit]{ context =>
     if (telemetryMetrics.logStatistics) {
       context.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
     }
