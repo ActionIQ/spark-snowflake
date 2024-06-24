@@ -311,6 +311,10 @@ private[snowflake] case class SnowflakeRelation(
 
       telemetryMetrics.setQueryId(Some(queryID))
 
+      sqlContext.sparkContext.emitMetricsLog(
+        telemetryMetrics.compileGlobalTelemetryTagsMap(Some(statement.toString))
+      )
+
       new SnowflakeResultSetRDD[T](
         resultSchema,
         sqlContext.sparkContext,

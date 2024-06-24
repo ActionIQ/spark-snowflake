@@ -27,6 +27,7 @@ import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.Parameters.MergedParameters
 import net.snowflake.client.jdbc.{SnowflakePreparedStatement, SnowflakeResultSet, SnowflakeStatement}
 import net.snowflake.spark.snowflake.io.SnowflakeResultSetRDD
+import org.apache.spark.ConnectorTelemetryHelpers
 import org.apache.spark.sql.types._
 import org.slf4j.LoggerFactory
 
@@ -664,18 +665,18 @@ private[snowflake] class SnowflakeSQLStatement(
     if (log.isDebugEnabled) {
       val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                       |execute query without bind variable =>
-                      |$query
+                      |"$query"
                       |
                       |callstack =>
                       |${Thread.currentThread.getStackTrace.mkString("\n")}
                       |""".stripMargin
-      log.debug(logMsg)
+      log.debug(ConnectorTelemetryHelpers.eventNameLogTagger(logMsg))
     } else {
       val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                       |execute query without bind variable =>
-                      |$query
+                      |"$query"
                       |""".stripMargin
-      log.info(logMsg)
+      log.info(ConnectorTelemetryHelpers.eventNameLogTagger(logMsg))
     }
 
     conn.prepareStatement(query)
@@ -702,7 +703,7 @@ private[snowflake] class SnowflakeSQLStatement(
     val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                        | execute query with bind variable:
                        |""".stripMargin.filter(_ >= ' ')
-    log.info(s"$logPrefix $query")
+    log.info(ConnectorTelemetryHelpers.eventNameLogTagger(s"""$logPrefix "$query""""))
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {
