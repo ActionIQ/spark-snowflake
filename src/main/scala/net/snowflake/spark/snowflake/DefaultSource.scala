@@ -53,7 +53,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
   def this() = this(DefaultJDBCWrapper)
 
   private def initializeRelation(sqlContext: SQLContext): Unit = {
-    val sparkContext = sqlContext.sparkSession.sparkContext
+    val sparkContext = sqlContext.sparkContext
 
     sparkContext.setLocalProperty("dataWarehouse", "snowflake")
 
