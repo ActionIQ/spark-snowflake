@@ -19,7 +19,6 @@ package net.snowflake.spark.snowflake
 
 import net.snowflake.spark.snowflake.streaming.SnowflakeSink
 import net.snowflake.spark.snowflake.Utils.SNOWFLAKE_SOURCE_SHORT_NAME
-import org.apache.spark.ConnectorTelemetryHelpers
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -40,9 +39,14 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     with SchemaRelationProvider
     with CreatableRelationProvider
     with StreamSinkProvider
-    with DataSourceRegister {
+    with DataSourceRegister
+    with DataSourceTelemetryProvider {
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
+
+  override def dataSourceType(): String = "spark_connector"
+
+  override def dataWarehouseName(parameters: Map[String, String]): String = shortName()
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -67,7 +71,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
 
-    ConnectorTelemetryHelpers.initializeRelation(sqlContext.sparkContext, "snowflake")
+    initializeRelationTelemetry(sqlContext, parameters)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
 
@@ -87,7 +91,7 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
 
-    ConnectorTelemetryHelpers.initializeRelation(sqlContext.sparkContext, "snowflake")
+    initializeRelationTelemetry(sqlContext, parameters)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
 

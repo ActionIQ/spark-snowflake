@@ -6,15 +6,14 @@ import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, Sno
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues}
-import org.apache.spark.ConnectorTelemetryHelpers
-import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
+import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers, Partition, SparkContext, TaskContext}
+import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_METRICS_NAMESPACE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{ConnectorTelemetry, Partition, SparkContext, TaskContext}
 import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
@@ -32,7 +31,7 @@ class SnowflakeResultSetRDD[T: ClassTag](
   proxyInfo: Option[ProxyInfo],
   queryID: String,
   sfFullURL: String,
-  telemetryMetrics: ConnectorTelemetry
+  telemetryMetrics: DataSourceTelemetry
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
@@ -64,8 +63,8 @@ case class ResultIterator[T: ClassTag](
   proxyInfo: Option[ProxyInfo],
   queryID: String,
   sfFullURL: String,
-  telemetryMetrics: ConnectorTelemetry = ConnectorTelemetry()
-) extends Iterator[T] {
+  telemetryMetrics: DataSourceTelemetry = DataSourceTelemetry()
+) extends Iterator[T] with DataSourceTelemetryHelpers {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
     // Set up proxy info if it is configured.
@@ -81,10 +80,10 @@ case class ResultIterator[T: ClassTag](
   val data: ResultSet = {
     try {
       SnowflakeResultSetRDD.logger.info(
-        ConnectorTelemetryHelpers.eventNameLogTagger(
+        logEventNameTagger(
           s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
-             |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
-             |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
+             |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
+             |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
              |TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
              |""".stripMargin.linesIterator.mkString(" ")
         )
@@ -158,19 +157,16 @@ case class ResultIterator[T: ClassTag](
 
     try {
       if (data.next()) {
-        if (actualReadRowCount == 0L) {
-          telemetryMetrics.setFirstRowReadAt()
-        }
         // Move to the current row in the ResultSet, but it is not consumed yet.
         currentRowNotConsumedYet = true
         true
       } else {
         SnowflakeResultSetRDD.logger.info(
-          ConnectorTelemetryHelpers.eventNameLogTagger(
+          logEventNameTagger(
             s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
-               |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
-               |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
-               |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.actualReadRowCount=$actualReadRowCount
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.actualReadRowCount=$actualReadRowCount
                |""".stripMargin.linesIterator.mkString(" ")
           )
         )
@@ -270,7 +266,7 @@ case class ResultIterator[T: ClassTag](
 
     // Increase actual read row count
     actualReadRowCount += 1
-    telemetryMetrics.readRowCount.set(actualReadRowCount)
+    telemetryMetrics.incrementRowCount()
 
     // The row is consumed, the iterator can move to next row.
     currentRowNotConsumedYet = false

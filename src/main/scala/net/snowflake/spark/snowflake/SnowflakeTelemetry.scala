@@ -11,11 +11,11 @@ import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.node.Object
 import net.snowflake.client.jdbc.telemetryOOB.{TelemetryEvent, TelemetryService}
 import net.snowflake.spark.snowflake.DefaultJDBCWrapper.DataBaseOperations
 import net.snowflake.spark.snowflake.TelemetryTypes.TelemetryTypes
-import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
+import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_METRICS_NAMESPACE
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.{ConnectorTelemetryHelpers, SparkConf, SparkEnv, TaskContext}
+import org.apache.spark.{DataSourceTelemetryHelpers, SparkConf, SparkEnv, TaskContext}
 
-object SnowflakeTelemetry {
+object SnowflakeTelemetry extends DataSourceTelemetryHelpers {
 
   // type/source/data are first level field names for spark telemetry message.
   // They should not be changed.
@@ -272,11 +272,11 @@ object SnowflakeTelemetry {
                              exception: SnowflakePushdownUnsupportedException)
   : Unit = {
     logger.info(
-      ConnectorTelemetryHelpers.failureLogTagger(
+      logFailureTagger(
         s"""Pushdown fails because of
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.operation=${exception.unsupportedOperation}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.message=${exception.getMessage}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.isKnown=${exception.isKnownUnsupportedOperation}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.operation=${exception.unsupportedOperation}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.message=${exception.getMessage}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.isKnown=${exception.isKnownUnsupportedOperation}
            |""".stripMargin.linesIterator.mkString(" ")
       )
     )

@@ -32,8 +32,8 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import org.apache.spark.ConnectorTelemetryHelpers
-import org.apache.spark.ConnectorTelemetryNamespace.CONNECTOR_TELEMETRY_METRICS_NAMESPACE
+import org.apache.spark.DataSourceTelemetryHelpers
+import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_METRICS_NAMESPACE
 
 import scala.collection.JavaConverters
 
@@ -45,7 +45,8 @@ private[snowflake] case class SnowflakeRelation(
 )(@transient val sqlContext: SQLContext)
     extends BaseRelation
     with PrunedFilteredScan
-    with InsertableRelation {
+    with InsertableRelation
+    with DataSourceTelemetryHelpers {
 
   import SnowflakeRelation._
 
@@ -114,8 +115,8 @@ private[snowflake] case class SnowflakeRelation(
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
 
-    if (sqlContext.sparkContext.connectorTelemetryPushDownStrategyFailed.get()) {
-      sqlContext.sparkContext.connectorTelemetryNumOfFailedPushDownQueries.getAndIncrement()
+    if (sqlContext.sparkContext.dataSourceTelemetry.pushDownStrategyFailed.get()) {
+      sqlContext.sparkContext.dataSourceTelemetry.numOfFailedPushDownQueries.getAndIncrement()
     }
 
     if (requiredColumns.isEmpty) {
@@ -190,7 +191,7 @@ private[snowflake] case class SnowflakeRelation(
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
 
-    val telemetryMetrics = ConnectorTelemetryHelpers.initializeConnectorTelemetry(
+    val telemetryMetrics = DataSourceTelemetryHelpers.createDataSourceTelemetry(
       sqlContext.sparkContext,
       Some("SnowflakeResultSetRDD")
     )
@@ -200,7 +201,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
       Utils.setLastSelect(statement.toString)
       log.info(
-        ConnectorTelemetryHelpers.eventNameLogTagger(
+        logEventNameTagger(
           s"Now executing below command to read from snowflake:\n${statement.toString}"
         )
       )
@@ -212,7 +213,7 @@ private[snowflake] case class SnowflakeRelation(
           val rs = statement.execute(bindVariableEnabled = false)(conn)
           val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
           log.info(
-            ConnectorTelemetryHelpers.eventNameLogTagger(
+            logEventNameTagger(
               s"The query ID for reading from snowflake is: $queryID; " +
                 s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
             )
@@ -225,7 +226,7 @@ private[snowflake] case class SnowflakeRelation(
           val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
           log.info(
-            ConnectorTelemetryHelpers.eventNameLogTagger(
+            logEventNameTagger(
               s"The query ID for async reading from snowflake is: $queryID; " +
                 s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
             )
@@ -349,15 +350,15 @@ private[snowflake] case class SnowflakeRelation(
 
     val partitionCount = resultSetSerializables.length
     log.info(
-      ConnectorTelemetryHelpers.eventNameLogTagger(
+      logEventNameTagger(
         // scalastyle:off line.size.limit
         s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.partitionCount=$partitionCount
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.readRowCount=$totalRowCount
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(totalCompressedSize)}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.QueryTime=${Utils.getTimeString(queryTimeInMs)}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.QueryID=$queryID
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionCount=$partitionCount
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.readRowCount=$totalRowCount
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(totalCompressedSize)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryTime=${Utils.getTimeString(queryTimeInMs)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryID=$queryID
            |""".stripMargin.linesIterator.mkString(" ")
         // scalastyle:on line.size.limit
       )
@@ -367,12 +368,12 @@ private[snowflake] case class SnowflakeRelation(
     val aveCompressSize = totalCompressedSize / partitionCount
     val aveUnCompressSize = totalUnCompressedSize / partitionCount
     log.info(
-      ConnectorTelemetryHelpers.eventNameLogTagger(
+      logEventNameTagger(
         // scalastyle:off line.size.limit
         s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.rowCount=$aveCount
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(aveCompressSize)}
-           |$CONNECTOR_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.rowCount=$aveCount
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(aveCompressSize)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
            |""".stripMargin.linesIterator.mkString(" ")
         // scalastyle:on line.size.limit
       )
