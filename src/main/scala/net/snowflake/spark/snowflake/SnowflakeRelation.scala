@@ -202,7 +202,7 @@ private[snowflake] case class SnowflakeRelation(
       Utils.setLastSelect(statement.toString)
       log.info(
         logEventNameTagger(
-          s"Now executing below command to read from snowflake:\n<${statement.toString}>"
+          s"Now executing below command to read from snowflake:\n'${statement.toString}'"
         )
       )
 
