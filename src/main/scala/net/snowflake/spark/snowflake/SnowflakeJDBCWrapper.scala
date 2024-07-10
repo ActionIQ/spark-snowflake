@@ -674,7 +674,7 @@ private[snowflake] class SnowflakeSQLStatement(
     } else {
       val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                       |execute query without bind variable =>
-                      |"$query"
+                      |<$query>
                       |""".stripMargin
       log.info(logEventNameTagger(logMsg))
     }
@@ -703,7 +703,7 @@ private[snowflake] class SnowflakeSQLStatement(
     val logPrefix = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                        | execute query with bind variable:
                        |""".stripMargin.filter(_ >= ' ')
-    log.info(logEventNameTagger(s"""$logPrefix "$query""""))
+    log.info(logEventNameTagger(s"$logPrefix <$query>"))
 
     val statement = conn.prepareStatement(query)
     varArray.zipWithIndex.foreach {

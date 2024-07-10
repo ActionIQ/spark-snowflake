@@ -2,7 +2,7 @@ package net.snowflake.spark.snowflake.pushdowns
 
 import net.snowflake.spark.snowflake.{SnowflakeConnectorFeatureNotSupportException, SnowflakeRelation}
 import net.snowflake.spark.snowflake.pushdowns.querygeneration.QueryBuilder
-import org.apache.spark.SparkContext
+import org.apache.spark.{DataSourceTelemetryHelpers, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkPlan
@@ -16,7 +16,9 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
   * but in beta mode we'll do it for safety and let Spark use other strategies
   * in case of unexpected failure.
   */
-class SnowflakeStrategy(sparkContext: SparkContext) extends Strategy {
+class SnowflakeStrategy(sparkContext: SparkContext)
+  extends Strategy
+    with DataSourceTelemetryHelpers {
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     try {
@@ -26,10 +28,12 @@ class SnowflakeStrategy(sparkContext: SparkContext) extends Strategy {
       })).getOrElse(Nil)
     } catch {
       case ue: SnowflakeConnectorFeatureNotSupportException =>
-        log.warn(s"Snowflake does't support this feature :${ue.getMessage}")
+        log.warn(s"Snowflake doesn't support this feature:\n${ue.getMessage}")
         throw ue
       case e: Exception =>
-        log.warn(s"Pushdown failed :${e.getMessage}")
+        if (foundCloudRelation(plan)) {
+          log.warn(logEventNameTagger(s"PushDown failed:\n${e.getMessage}"))
+        }
         Nil
     }
   }
@@ -47,10 +51,15 @@ class SnowflakeStrategy(sparkContext: SparkContext) extends Strategy {
     }.orElse {
       // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
       // ONLY when Cloud tables are involved in a query plan otherwise it's false signal
-      plan match {
-        case LogicalRelation(r, _, _, _) if r.isInstanceOf[SnowflakeRelation] =>
-          sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
+      if (foundCloudRelation(plan)) {
+        sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
       }
       None
     }
+
+  private def foundCloudRelation(plan: LogicalPlan): Boolean = {
+    plan.collectFirst {
+      case LogicalRelation(r, _, _, _) if r.isInstanceOf[SnowflakeRelation] => true
+    }.getOrElse(false)
+  }
 }
