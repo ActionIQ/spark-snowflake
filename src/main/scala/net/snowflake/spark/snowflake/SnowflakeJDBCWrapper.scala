@@ -665,7 +665,7 @@ private[snowflake] class SnowflakeSQLStatement(
     if (log.isDebugEnabled) {
       val logMsg = s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
                       |execute query without bind variable =>
-                      |"$query"
+                      |<$query>
                       |
                       |callstack =>
                       |${Thread.currentThread.getStackTrace.mkString("\n")}
