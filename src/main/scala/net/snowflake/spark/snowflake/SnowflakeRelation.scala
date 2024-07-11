@@ -343,9 +343,9 @@ private[snowflake] case class SnowflakeRelation(
     if (telemetryMetrics.logStatistics) {
       sqlContext.sparkContext.emitMetricsLog(
         telemetryMetrics.compileTelemetryTagsMap() map {
-          case (key, _) if key == DATASOURCE_TELEMETRY_READ_ROW_COUNT =>
+          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
             DATASOURCE_TELEMETRY_READ_ROW_COUNT -> totalRowCount.toString
-          case (key, _) if key == DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS =>
+          case (DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS, _) =>
             DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS -> queryTimeInMs.toString
           case t => t
         }
