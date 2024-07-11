@@ -298,7 +298,7 @@ private[snowflake] case class SnowflakeRelation(
 
       val endTime = System.currentTimeMillis()
       val (rowCount, dataSize) = printStatForSnowflakeResultSetRDD(
-        resultSetSerializables, endTime - startTime, queryID, telemetryMetrics)
+        resultSetSerializables, endTime - startTime, queryID)
 
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
@@ -325,8 +325,7 @@ private[snowflake] case class SnowflakeRelation(
   private def printStatForSnowflakeResultSetRDD(
     resultSetSerializables: Array[SnowflakeResultSetSerializable],
     queryTimeInMs: Long,
-    queryID: String,
-    telemetryMetrics: DataSourceTelemetry
+    queryID: String
   ): (Long, Long) = {
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
@@ -338,18 +337,6 @@ private[snowflake] case class SnowflakeRelation(
         totalCompressedSize += resultSetSerializable.getCompressedDataSizeInBytes
         totalUnCompressedSize += resultSetSerializable.getUncompressedDataSizeInBytes
       }
-    }
-
-    if (telemetryMetrics.logStatistics && resultSetSerializables.length > 1) {
-      sqlContext.sparkContext.emitMetricsLog(
-        telemetryMetrics.compileTelemetryTagsMap() map {
-          case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
-            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> totalRowCount.toString
-          case (DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS, _) =>
-            DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS -> queryTimeInMs.toString
-          case t => t
-        }
-      )
     }
 
     val partitionCount = resultSetSerializables.length
