@@ -32,8 +32,8 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import org.apache.spark.DataSourceTelemetryHelpers
-import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_METRICS_NAMESPACE
+import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers}
+import org.apache.spark.DataSourceTelemetryNamespace.{DATASOURCE_TELEMETRY_METRICS_NAMESPACE, DATASOURCE_TELEMETRY_READ_ROW_COUNT, DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS}
 
 import scala.collection.JavaConverters
 
@@ -264,6 +264,7 @@ private[snowflake] case class SnowflakeRelation(
           throw th
       }
       Utils.setLastSelectQueryId(queryID)
+      telemetryMetrics.setQueryId(Some(queryID))
 
       // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
       // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
@@ -297,12 +298,10 @@ private[snowflake] case class SnowflakeRelation(
 
       val endTime = System.currentTimeMillis()
       val (rowCount, dataSize) = printStatForSnowflakeResultSetRDD(
-        resultSetSerializables, endTime - startTime, queryID)
+        resultSetSerializables, endTime - startTime, queryID, telemetryMetrics)
 
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
-
-      telemetryMetrics.setQueryId(Some(queryID))
 
       sqlContext.sparkContext.emitMetricsLog(
         telemetryMetrics.compileGlobalTelemetryTagsMap(Some(statement.toString))
@@ -326,7 +325,8 @@ private[snowflake] case class SnowflakeRelation(
   private def printStatForSnowflakeResultSetRDD(
     resultSetSerializables: Array[SnowflakeResultSetSerializable],
     queryTimeInMs: Long,
-    queryID: String
+    queryID: String,
+    telemetryMetrics: DataSourceTelemetry
   ): (Long, Long) = {
     var totalRowCount: Long = 0
     var totalCompressedSize: Long = 0
@@ -338,6 +338,18 @@ private[snowflake] case class SnowflakeRelation(
         totalCompressedSize += resultSetSerializable.getCompressedDataSizeInBytes
         totalUnCompressedSize += resultSetSerializable.getUncompressedDataSizeInBytes
       }
+    }
+
+    if (telemetryMetrics.logStatistics) {
+      sqlContext.sparkContext.emitMetricsLog(
+        telemetryMetrics.compileTelemetryTagsMap() map {
+          case (key, _) if key == DATASOURCE_TELEMETRY_READ_ROW_COUNT =>
+            DATASOURCE_TELEMETRY_READ_ROW_COUNT -> totalRowCount.toString
+          case (key, _) if key == DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS =>
+            DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS -> queryTimeInMs.toString
+          case t => t
+        }
+      )
     }
 
     val partitionCount = resultSetSerializables.length
