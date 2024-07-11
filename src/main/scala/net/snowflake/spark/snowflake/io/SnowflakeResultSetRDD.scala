@@ -134,7 +134,10 @@ case class ResultIterator[T: ClassTag](
 
   TaskContext.get().addTaskCompletionListener[Unit]{ context =>
     if (telemetryMetrics.logStatistics) {
-      context.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
+      context.emitMetricsLog(
+        telemetryMetrics.compileTelemetryTagsMap() ++
+          Map(s"$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId" -> partitionIndex.toString)
+      )
     }
     closeResultSet()
   }
