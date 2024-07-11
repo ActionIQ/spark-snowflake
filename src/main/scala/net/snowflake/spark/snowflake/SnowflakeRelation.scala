@@ -212,12 +212,8 @@ private[snowflake] case class SnowflakeRelation(
         if (params.isExecuteQueryWithSyncMode) {
           val rs = statement.execute(bindVariableEnabled = false)(conn)
           val queryID = rs.asInstanceOf[SnowflakeResultSet].getQueryID
-          log.info(
-            logEventNameTagger(
-              s"The query ID for reading from snowflake is: $queryID; " +
-                s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
-            )
-          )
+          log.info(s"The query ID for reading from snowflake is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
           val objects = rs
             .asInstanceOf[SnowflakeResultSet]
             .getResultSetSerializables(params.expectedPartitionSize)
@@ -225,12 +221,8 @@ private[snowflake] case class SnowflakeRelation(
         } else {
           val asyncRs = statement.executeAsync(bindVariableEnabled = false)(conn)
           val queryID = asyncRs.asInstanceOf[SnowflakeResultSet].getQueryID
-          log.info(
-            logEventNameTagger(
-              s"The query ID for async reading from snowflake is: $queryID; " +
-                s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}"
-            )
-          )
+          log.info(s"The query ID for async reading from snowflake is: $queryID; " +
+            s"The query ID URL is:\n${params.getQueryIDUrl(queryID)}")
           SparkConnectorContext.addRunningQuery(sqlContext.sparkContext, conn, queryID)
           // The query is executed in async mode, getResultSetSerializables() is blocked
           // until query is done.
@@ -353,12 +345,12 @@ private[snowflake] case class SnowflakeRelation(
       logEventNameTagger(
         // scalastyle:off line.size.limit
         s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionCount=$partitionCount
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.readRowCount=$totalRowCount
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(totalCompressedSize)}
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryTime=${Utils.getTimeString(queryTimeInMs)}
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryID=$queryID
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionCount='$partitionCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.readRowCount='$totalRowCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize='${Utils.getSizeString(totalCompressedSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize='${Utils.getSizeString(totalUnCompressedSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryTime='${Utils.getTimeString(queryTimeInMs)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryID='$queryID'
            |""".stripMargin.linesIterator.mkString(" ")
         // scalastyle:on line.size.limit
       )
@@ -371,9 +363,9 @@ private[snowflake] case class SnowflakeRelation(
       logEventNameTagger(
         // scalastyle:off line.size.limit
         s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.rowCount=$aveCount
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize=${Utils.getSizeString(aveCompressSize)}
-           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.rowCount='$aveCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize='${Utils.getSizeString(aveCompressSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize='${Utils.getSizeString(aveUnCompressSize)}'
            |""".stripMargin.linesIterator.mkString(" ")
         // scalastyle:on line.size.limit
       )
