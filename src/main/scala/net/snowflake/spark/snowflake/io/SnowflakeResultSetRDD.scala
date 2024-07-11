@@ -136,7 +136,7 @@ case class ResultIterator[T: ClassTag](
     if (telemetryMetrics.logStatistics) {
       context.emitMetricsLog(
         telemetryMetrics.compileTelemetryTagsMap() ++
-          Map(s"$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId" -> partitionIndex.toString)
+          Map(s"$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partition_id" -> partitionIndex.toString)
       )
     }
     closeResultSet()

@@ -340,7 +340,7 @@ private[snowflake] case class SnowflakeRelation(
       }
     }
 
-    if (telemetryMetrics.logStatistics) {
+    if (telemetryMetrics.logStatistics && resultSetSerializables.length > 1) {
       sqlContext.sparkContext.emitMetricsLog(
         telemetryMetrics.compileTelemetryTagsMap() map {
           case (DATASOURCE_TELEMETRY_READ_ROW_COUNT, _) =>
