@@ -32,8 +32,9 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
+import org.apache.spark.DataSourceTelemetryHelpers
+import org.apache.spark.DataSourceTelemetryNamespace.{DATASOURCE_TELEMETRY_METRICS_NAMESPACE, DATASOURCE_TELEMETRY_READ_ROW_COUNT, DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS}
 
-import java.time.Instant
 import scala.collection.JavaConverters
 
 /** Data Source API implementation for Amazon Snowflake database tables */
@@ -44,7 +45,8 @@ private[snowflake] case class SnowflakeRelation(
 )(@transient val sqlContext: SQLContext)
     extends BaseRelation
     with PrunedFilteredScan
-    with InsertableRelation {
+    with InsertableRelation
+    with DataSourceTelemetryHelpers {
 
   import SnowflakeRelation._
 
@@ -112,6 +114,11 @@ private[snowflake] case class SnowflakeRelation(
   // when extra pushdowns are disabled.
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
+
+    if (sqlContext.sparkContext.dataSourceTelemetry.pushDownStrategyFailed.get()) {
+      sqlContext.sparkContext.dataSourceTelemetry.numOfFailedPushDownQueries.getAndIncrement()
+    }
+
     if (requiredColumns.isEmpty) {
       // In the special case where no columns were requested, issue a `count(*)` against Snowflake
       // rather than unloading data.
@@ -183,13 +190,23 @@ private[snowflake] case class SnowflakeRelation(
     resultSchema: StructType
   ): RDD[T] = {
     val conn = DefaultJDBCWrapper.getConnector(params)
+
+    val telemetryMetrics = DataSourceTelemetryHelpers.createDataSourceTelemetry(
+      sqlContext.sparkContext,
+      Some("SnowflakeResultSetRDD")
+    )
+
     try {
       Utils.genPrologueSql(params).foreach(x => x.execute(bindVariableEnabled = false)(conn))
       Utils.executePreActions(DefaultJDBCWrapper, conn, params, params.table)
       Utils.setLastSelect(statement.toString)
-      log.info(s"Now executing below command to read from snowflake:\n${statement.toString}")
+      log.info(
+        logEventNameTagger(
+          s"Now executing below command to read from Snowflake:\n'${statement.toString}'"
+        )
+      )
 
-      val querySubmissionTime = Instant.now()
+      telemetryMetrics.setQuerySubmissionTime()
       val startTime = System.currentTimeMillis()
       val (resultSet, queryID, serializables) = try {
         if (params.isExecuteQueryWithSyncMode) {
@@ -247,6 +264,7 @@ private[snowflake] case class SnowflakeRelation(
           throw th
       }
       Utils.setLastSelectQueryId(queryID)
+      telemetryMetrics.setQueryId(Some(queryID))
 
       // JavaConversions is deprecated from Scala 2.12, JavaConverters is the
       // new API. But we need to support multiple Scala versions like 2.10, 2.11 and 2.12.
@@ -285,7 +303,9 @@ private[snowflake] case class SnowflakeRelation(
       StageReader.sendEgressUsage(conn, queryID, rowCount, dataSize)
       SnowflakeTelemetry.send(conn.getTelemetry)
 
-      sqlContext.sparkContext.setLocalProperty("querySubmissionTime", querySubmissionTime.toString)
+      sqlContext.sparkContext.emitMetricsLog(
+        telemetryMetrics.compileGlobalTelemetryTagsMap(Some(statement.toString))
+      )
 
       new SnowflakeResultSetRDD[T](
         resultSchema,
@@ -293,7 +313,8 @@ private[snowflake] case class SnowflakeRelation(
         resultSetSerializables,
         params.proxyInfo,
         queryID,
-        params.sfFullURL
+        params.sfFullURL,
+        telemetryMetrics
       )
     } finally {
       conn.close()
@@ -319,22 +340,34 @@ private[snowflake] case class SnowflakeRelation(
     }
 
     val partitionCount = resultSetSerializables.length
-    log.info(s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
-         | partitionCount=$partitionCount rowCount=$totalRowCount
-         | compressSize=${Utils.getSizeString(totalCompressedSize)}
-         | unCompressSize=${Utils.getSizeString(totalUnCompressedSize)}
-         | QueryTime=${Utils.getTimeString(queryTimeInMs)} QueryID=$queryID
-         |""".stripMargin.filter(_ >= ' '))
+    log.info(
+      logEventNameTagger(
+        // scalastyle:off line.size.limit
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Total statistics:
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionCount='$partitionCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.readRowCount='$totalRowCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize='${Utils.getSizeString(totalCompressedSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize='${Utils.getSizeString(totalUnCompressedSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryTime='${Utils.getTimeString(queryTimeInMs)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.QueryID='$queryID'
+           |""".stripMargin.linesIterator.mkString(" ")
+        // scalastyle:on line.size.limit
+      )
+    )
 
     val aveCount = totalRowCount / partitionCount
     val aveCompressSize = totalCompressedSize / partitionCount
     val aveUnCompressSize = totalUnCompressedSize / partitionCount
     log.info(
-      s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}:
-         | Average statistics per partition: rowCount=$aveCount
-         | compressSize=${Utils.getSizeString(aveCompressSize)}
-         | unCompressSize=${Utils.getSizeString(aveUnCompressSize)}
-         |""".stripMargin.filter(_ >= ' ')
+      logEventNameTagger(
+        // scalastyle:off line.size.limit
+        s"""${SnowflakeResultSetRDD.MASTER_LOG_PREFIX}: Average statistics per partition:
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.rowCount='$aveCount'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.compressSize='${Utils.getSizeString(aveCompressSize)}'
+           |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.unCompressSize='${Utils.getSizeString(aveUnCompressSize)}'
+           |""".stripMargin.linesIterator.mkString(" ")
+        // scalastyle:on line.size.limit
+      )
     )
     (totalRowCount, totalCompressedSize)
   }

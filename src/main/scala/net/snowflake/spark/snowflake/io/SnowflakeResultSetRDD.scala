@@ -6,17 +6,16 @@ import net.snowflake.client.jdbc.{ErrorCode, SnowflakeResultSetSerializable, Sno
 import net.snowflake.client.jdbc.internal.fasterxml.jackson.databind.ObjectMapper
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
 import net.snowflake.spark.snowflake.{Conversions, ProxyInfo, SnowflakeConnectorException, SnowflakeTelemetry, SparkConnectorContext, TelemetryConstValues}
+import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers, Partition, SparkContext, TaskContext}
+import org.apache.spark.DataSourceTelemetryNamespace.DATASOURCE_TELEMETRY_METRICS_NAMESPACE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.slf4j.LoggerFactory
 
-import java.time.{Duration, Instant}
-import java.time.format.DateTimeFormatter
 import scala.reflect.ClassTag
 
 object SnowflakeResultSetRDD {
@@ -31,7 +30,8 @@ class SnowflakeResultSetRDD[T: ClassTag](
   resultSets: Array[SnowflakeResultSetSerializable],
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String
+  sfFullURL: String,
+  telemetryMetrics: DataSourceTelemetry
 ) extends RDD[T](sc, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
@@ -40,12 +40,12 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
     ResultIterator[T](
       schema,
-      context,
       split.asInstanceOf[SnowflakeResultSetPartition].resultSet,
       split.asInstanceOf[SnowflakeResultSetPartition].index,
       proxyInfo,
       queryID,
-      sfFullURL
+      sfFullURL,
+      telemetryMetrics
     )
   }
 
@@ -58,13 +58,13 @@ class SnowflakeResultSetRDD[T: ClassTag](
 
 case class ResultIterator[T: ClassTag](
   schema: StructType,
-  context: TaskContext,
   resultSet: SnowflakeResultSetSerializable,
   partitionIndex: Int,
   proxyInfo: Option[ProxyInfo],
   queryID: String,
-  sfFullURL: String
-) extends Iterator[T] {
+  sfFullURL: String,
+  telemetryMetrics: DataSourceTelemetry = DataSourceTelemetry()
+) extends Iterator[T] with DataSourceTelemetryHelpers {
   val jdbcProperties: Properties = {
     val jdbcProperties = new Properties()
     // Set up proxy info if it is configured.
@@ -75,18 +75,19 @@ case class ResultIterator[T: ClassTag](
     }
     jdbcProperties
   }
-  var firstRowReadAt: Option[Instant] = None
   var actualReadRowCount: Long = 0
   val expectedRowCount: Long = resultSet.getRowCount
   val data: ResultSet = {
     try {
       SnowflakeResultSetRDD.logger.info(
-        s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
-           | partition ID:$partitionIndex expectedRowCount=
-           | $expectedRowCount TaskInfo:
-           | ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
-           |""".stripMargin.filter(_ >=
-          ' '))
+        logEventNameTagger(
+          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Start reading
+             |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
+             |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
+             |TaskInfo: ${SnowflakeTelemetry.getTaskInfo().toPrettyString}
+             |""".stripMargin.linesIterator.mkString(" ")
+        )
+      )
 
       // Inject Exception for test purpose
       TestHook.raiseExceptionIfTestFlagEnabled(
@@ -94,7 +95,7 @@ case class ResultIterator[T: ClassTag](
         "Negative test to raise error when opening a result set"
       )
 
-      resultSet.getResultSet(
+      val rs = resultSet.getResultSet(
         SnowflakeResultSetSerializable
           .ResultSetRetrieveConfig
           .Builder
@@ -103,6 +104,10 @@ case class ResultIterator[T: ClassTag](
           .setSfFullURL(sfFullURL)
           .build()
       )
+
+      telemetryMetrics.readColumnCount.set(rs.getMetaData.getColumnCount)
+
+      rs
     } catch {
       case th: Throwable => {
         // Send OOB telemetry message if reading failure happens
@@ -127,7 +132,15 @@ case class ResultIterator[T: ClassTag](
   var currentRowNotConsumedYet: Boolean = false
   var resultSetIsClosed: Boolean = false
 
-  TaskContext.get().addTaskCompletionListener[Unit](_ => closeResultSet())
+  TaskContext.get().addTaskCompletionListener[Unit]{ context =>
+    if (telemetryMetrics.logStatistics) {
+      context.emitMetricsLog(
+        telemetryMetrics.compileTelemetryTagsMap() ++
+          Map(s"$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partition_id" -> partitionIndex.toString)
+      )
+    }
+    closeResultSet()
+  }
 
   private def closeResultSet(): Unit = {
     if (!resultSetIsClosed) {
@@ -147,18 +160,19 @@ case class ResultIterator[T: ClassTag](
 
     try {
       if (data.next()) {
-        if (actualReadRowCount == 0L) {
-          firstRowReadAt = Option(Instant.now())
-        }
         // Move to the current row in the ResultSet, but it is not consumed yet.
         currentRowNotConsumedYet = true
         true
       } else {
         SnowflakeResultSetRDD.logger.info(
-          s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
-             | partition ID:$partitionIndex expectedRowCount=$expectedRowCount
-             | actualReadRowCount=$actualReadRowCount
-             |""".stripMargin.filter(_ >= ' '))
+          logEventNameTagger(
+            s"""${SnowflakeResultSetRDD.WORKER_LOG_PREFIX}: Finish reading
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partitionId=$partitionIndex
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.expectedRowCount=$expectedRowCount
+               |$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.actualReadRowCount=$actualReadRowCount
+               |""".stripMargin.linesIterator.mkString(" ")
+          )
+        )
 
         closeResultSet()
 
@@ -175,26 +189,8 @@ case class ResultIterator[T: ClassTag](
                | ID:$partitionIndex. Related query ID is $queryID
                |""".stripMargin.filter(_ >= ' '))
         }
-        val lastRowReadAt = Instant.now()
-        (Option(context.getLocalProperty("querySubmissionTime")), firstRowReadAt) match {
-          case (Some(t), Some(firstRowReadAt)) =>
-            val formatter = DateTimeFormatter.ISO_INSTANT
-            val querySubmissionTime = Instant.from(formatter.parse(t))
-            val tags = Map(
-              "warehouse_read_latency_millis" ->
-                s"${Duration.between(firstRowReadAt, lastRowReadAt).toMillis}",
-              "warehouse_query_latency_millis" ->
-                s"${Duration.between(querySubmissionTime, firstRowReadAt).toMillis}",
-              "data_source" -> "snowflake",
-              "query_submitted_at" -> querySubmissionTime.toString,
-              "first_row_read_at"-> firstRowReadAt.toString,
-              "last_row_read_at" -> lastRowReadAt.toString,
-              "row_count" -> actualReadRowCount.toString,
-            )
-            context.emitLog(tags)
-          case _ =>
-            SnowflakeResultSetRDD.logger.warn("querySubmissionTime not found in TaskContext")
-        }
+
+        telemetryMetrics.setLastRowReadAt()
         false
       }
     } catch {
@@ -273,6 +269,7 @@ case class ResultIterator[T: ClassTag](
 
     // Increase actual read row count
     actualReadRowCount += 1
+    telemetryMetrics.incrementRowCount()
 
     // The row is consumed, the iterator can move to next row.
     currentRowNotConsumedYet = false

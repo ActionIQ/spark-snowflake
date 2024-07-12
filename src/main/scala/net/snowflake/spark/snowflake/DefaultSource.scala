@@ -39,9 +39,14 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     with SchemaRelationProvider
     with CreatableRelationProvider
     with StreamSinkProvider
-    with DataSourceRegister {
+    with DataSourceRegister
+    with DataSourceTelemetryProvider {
 
   override def shortName(): String = SNOWFLAKE_SOURCE_SHORT_NAME
+
+  override def dataSourceType(): String = "spark_connector"
+
+  override def dataWarehouseName(parameters: Map[String, String]): String = shortName()
 
   private val log = LoggerFactory.getLogger(getClass)
 
@@ -65,6 +70,8 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     }
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
+
+    initializeRelationTelemetry(sqlContext, parameters)
     SnowflakeRelation(jdbcWrapper, params, None)(sqlContext)
   }
 
@@ -83,6 +90,8 @@ class DefaultSource(jdbcWrapper: JDBCWrapper)
     }
     // pass parameters to pushdown functions
     pushdowns.setGlobalParameter(params)
+
+    initializeRelationTelemetry(sqlContext, parameters)
     SnowflakeRelation(jdbcWrapper, params, Some(schema))(sqlContext)
   }
 

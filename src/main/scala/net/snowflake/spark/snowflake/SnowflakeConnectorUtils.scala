@@ -58,7 +58,7 @@ object SnowflakeConnectorUtils {
     if (!session.experimental.extraStrategies.exists(
           s => s.isInstanceOf[SnowflakeStrategy]
         )) {
-      session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy)
+      session.experimental.extraStrategies ++= Seq(new SnowflakeStrategy(session.sparkContext))
     }
   }
 
