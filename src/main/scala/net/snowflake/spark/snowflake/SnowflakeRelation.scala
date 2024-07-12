@@ -32,7 +32,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import net.snowflake.client.jdbc.{SnowflakeLoggedFeatureNotSupportedException, SnowflakeResultSet, SnowflakeResultSetSerializable}
 import net.snowflake.spark.snowflake.test.{TestHook, TestHookFlag}
-import org.apache.spark.{DataSourceTelemetry, DataSourceTelemetryHelpers}
+import org.apache.spark.DataSourceTelemetryHelpers
 import org.apache.spark.DataSourceTelemetryNamespace.{DATASOURCE_TELEMETRY_METRICS_NAMESPACE, DATASOURCE_TELEMETRY_READ_ROW_COUNT, DATASOURCE_TELEMETRY_WAREHOUSE_READ_LATENCY_MILLIS}
 
 import scala.collection.JavaConverters
