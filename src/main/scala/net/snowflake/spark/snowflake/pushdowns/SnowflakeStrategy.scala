@@ -59,7 +59,7 @@ class SnowflakeStrategy(sparkContext: SparkContext)
 
   private def foundSnowflakeRelation(plan: LogicalPlan): Boolean = {
     plan.collectFirst {
-      case LogicalRelation(r, _, _, _) if r.isInstanceOf[SnowflakeRelation] => true
+      case LogicalRelation(_: SnowflakeRelation, _, _, _) => true
     }.getOrElse(false)
   }
 }
