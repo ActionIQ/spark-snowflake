@@ -82,7 +82,7 @@ private[querygeneration] class QueryBuilder(plan: LogicalPlan) {
     try {
       log.debug("Begin query generation.")
       analyzeSparkPlan(plan)
-      generateQueries(plan).get
+      generateQueries(plan).orNull
     } catch {
       // A telemetry message about push-down failure is sent if there are
       // any snowflake tables in the query plan.
