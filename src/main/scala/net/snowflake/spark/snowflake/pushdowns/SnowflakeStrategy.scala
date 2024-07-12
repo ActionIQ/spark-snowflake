@@ -31,7 +31,7 @@ class SnowflakeStrategy(sparkContext: SparkContext)
         log.warn(s"Snowflake doesn't support this feature:\n${ue.getMessage}")
         throw ue
       case e: Exception =>
-        if (foundCloudRelation(plan)) {
+        if (foundSnowflakeRelation(plan)) {
           log.warn(logEventNameTagger(s"PushDown failed:\n${e.getMessage}"))
         }
         Nil
@@ -51,13 +51,13 @@ class SnowflakeStrategy(sparkContext: SparkContext)
     }.orElse {
       // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
       // ONLY when Cloud tables are involved in a query plan otherwise it's false signal
-      if (foundCloudRelation(plan)) {
+      if (foundSnowflakeRelation(plan)) {
         sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
       }
       None
     }
 
-  private def foundCloudRelation(plan: LogicalPlan): Boolean = {
+  private def foundSnowflakeRelation(plan: LogicalPlan): Boolean = {
     plan.collectFirst {
       case LogicalRelation(r, _, _, _) if r.isInstanceOf[SnowflakeRelation] => true
     }.getOrElse(false)
