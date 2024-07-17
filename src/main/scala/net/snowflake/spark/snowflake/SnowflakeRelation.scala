@@ -115,7 +115,7 @@ private[snowflake] case class SnowflakeRelation(
   override def buildScan(requiredColumns: Array[String],
                          filters: Array[Filter]): RDD[Row] = {
 
-    if (sqlContext.sparkContext.dataSourceTelemetry.pushDownStrategyFailed.get()) {
+    if (sqlContext.sparkContext.dataSourceTelemetry.checkForPushDownFailures.get()) {
       sqlContext.sparkContext.dataSourceTelemetry.numOfFailedPushDownQueries.getAndIncrement()
     }
 
