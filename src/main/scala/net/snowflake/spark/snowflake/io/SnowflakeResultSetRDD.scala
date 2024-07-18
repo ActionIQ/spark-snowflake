@@ -95,6 +95,8 @@ case class ResultIterator[T: ClassTag](
         "Negative test to raise error when opening a result set"
       )
 
+      telemetryMetrics.setPartitionId(Some(partitionIndex.toString))
+
       val rs = resultSet.getResultSet(
         SnowflakeResultSetSerializable
           .ResultSetRetrieveConfig
@@ -134,10 +136,7 @@ case class ResultIterator[T: ClassTag](
 
   TaskContext.get().addTaskCompletionListener[Unit]{ context =>
     if (telemetryMetrics.logStatistics) {
-      context.emitMetricsLog(
-        telemetryMetrics.compileTelemetryTagsMap() ++
-          Map(s"$DATASOURCE_TELEMETRY_METRICS_NAMESPACE.partition_id" -> partitionIndex.toString)
-      )
+      context.emitMetricsLog(telemetryMetrics.compileTelemetryTagsMap())
     }
     closeResultSet()
   }

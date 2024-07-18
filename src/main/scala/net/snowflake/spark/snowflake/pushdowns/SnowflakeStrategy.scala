@@ -49,10 +49,10 @@ class SnowflakeStrategy(sparkContext: SparkContext)
       case (output: Seq[Attribute], rdd: RDD[InternalRow], sql: String) =>
         Seq(SnowflakePlan(output, rdd, sql))
     }.orElse {
-      // Set `dataSourceTelemetry.pushDownStrategyFailed` to `true` for when QueryBuilder fails
+      // Set `dataSourceTelemetry.checkForPushDownFailures` to `true` for when QueryBuilder fails
       // ONLY when Snowflake tables are involved in a query plan otherwise it's false signal
       if (foundSnowflakeRelation(plan)) {
-        sparkContext.dataSourceTelemetry.pushDownStrategyFailed.set(true)
+        sparkContext.dataSourceTelemetry.checkForPushDownFailures.set(true)
       }
       None
     }
